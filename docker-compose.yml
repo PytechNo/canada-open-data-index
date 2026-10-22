@@ -1,0 +1,20 @@
+# For Coolify (Docker Compose build pack) or plain `docker compose up -d --build`.
+# web serves the index from the shared volume: give it the domain in Coolify (it listens on port 80).
+# updater refreshes the volume every night and needs no domain. NOTIFY_URL (optional) gets a message when a run fails.
+services:
+  web:
+    build:
+      context: .
+      dockerfile: deploy/web.Dockerfile
+    volumes:
+      - index-data:/srv/index:ro
+    restart: unless-stopped
+  updater:
+    build: .
+    environment:
+      - NOTIFY_URL=${NOTIFY_URL:-}
+    volumes:
+      - index-data:/data
+    restart: unless-stopped
+volumes:
+  index-data:

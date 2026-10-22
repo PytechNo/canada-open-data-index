@@ -2,7 +2,7 @@
 
 An index of **every dataset on the open data portals of Canada's provinces and territories**, plus the federal departments' core collection on [open.canada.ca](https://open.canada.ca). For each dataset it lists what it contains, how often the publisher promised to update it, when it last changed, and a quality score to help you decide whether you can rely on it. Every portal is scored by the same rules, so the portals can be compared.
 
-Snapshot: **2026-10-22** · **13 portals** · **24,343 datasets** · **521 publishers** · **116,188 files** · column lists for **5,592 datasets**
+Snapshot in this repository: **2026-10-22** · **13 portals** · **24,343 datasets** · **521 publishers** · **116,188 files** · column lists for **5,592 datasets**. The hosted index is refreshed every night (see [Nightly updates](#nightly-updates)), so its numbers move on from these.
 
 > Unofficial. Built from each portal's public catalogue API. Not affiliated with any government.
 
@@ -13,6 +13,9 @@ Snapshot: **2026-10-22** · **13 portals** · **24,343 datasets** · **521 publi
   - [`data/datasets.csv`](data/datasets.csv): one row per dataset, 43 columns, including the score and every warning
   - [`data/files.csv`](data/files.csv): one row per file (116,188), with format, last change, size, download link and the portal's file checks
   - [`data/columns.csv`](data/columns.csv): one row per column of each dataset's main table (94,422 rows)
+  - [`data/portals.csv`](data/portals.csv): one row per portal, the numbers of the comparison table below
+
+The hosted index serves the same files under `/data/`, from its latest nightly run, plus `history.csv`: the `portals.csv` row of every run, to follow each portal over time.
 
 To open the interactive index locally, serve the folder (browsers block the page's data files when it is opened as a plain file):
 
@@ -119,20 +122,37 @@ Everything uses Python 3 with the standard library only. The portals are listed 
 
 | Step | Script | Output |
 |---|---|---|
-| 1. Crawl the Québec WordPress sitemaps | [`scripts/crawl_sitemaps.py`](scripts/crawl_sitemaps.py) | `sitemaps/sitemap_urls.csv` |
-| 2. Download each portal's catalogue (CKAN `package_search` and the Socrata catalogue 500 datasets per call, the Hub search 100 per call plus each item's record and feature service) | [`scripts/fetch_catalogue.py`](scripts/fetch_catalogue.py) | `raw/<code>/packages.json.gz` |
-| 3. Download Données Québec's field definitions | `curl` of `scheming_dataset_schema_show` | `raw/QC/schema.json` |
-| 4. Fetch the column list and row count of each dataset's main DataStore table on the CKAN portals (one `datastore_search?limit=0` call per dataset, 1.2 s apart; 3 at a time on the federal portal, whose DataStore is slow) | [`scripts/fetch_columns.py`](scripts/fetch_columns.py) | `raw/<code>/columns.jsonl` |
-| 5. Turn each portal's catalogue into common records, score every dataset and write the CSVs and page data | [`scripts/normalize.py`](scripts/normalize.py), [`scripts/build_index.py`](scripts/build_index.py) | `data/*.csv`, `site/index.json` (one slim row per dataset, loaded at start), `site/detail/<code>.json` (full records, loaded when a dataset from that portal is opened) |
-| 6. Package the page for static hosting | [`scripts/make_site.py`](scripts/make_site.py) | `docs/index.html`, `docs/index.json`, `docs/detail/` |
+| 1. Download each portal's catalogue (CKAN `package_search` and the Socrata catalogue 500 datasets per call, the Hub search 100 per call plus each item's record and feature service) | [`scripts/fetch_catalogue.py`](scripts/fetch_catalogue.py) | `raw/<code>/packages.json.gz` |
+| 2. Download Données Québec's field definitions | `curl` of `scheming_dataset_schema_show` | `raw/QC/schema.json` |
+| 3. Fetch the column list and row count of each dataset's main DataStore table on the CKAN portals (one `datastore_search?limit=0` call per table, 1.2 s apart; 3 at a time on the federal portal, whose DataStore is slow). Only tables that changed since the last run are fetched, except once a week | [`scripts/fetch_columns.py`](scripts/fetch_columns.py) | `raw/<code>/columns.jsonl` |
+| 4. Turn each portal's catalogue into common records, score every dataset and write the CSVs and page data | [`scripts/normalize.py`](scripts/normalize.py), [`scripts/build_index.py`](scripts/build_index.py) | `data/*.csv`, `site/index.json` (one slim row per dataset, loaded at start), `site/detail/<code>.json` (full records, loaded when a dataset from that portal is opened) |
+| 5. Package the page and the CSVs for static hosting, and add this run to the history | [`scripts/make_site.py`](scripts/make_site.py), [`run_all.sh`](run_all.sh) | `docs/` (`index.html`, `index.json`, `detail/`, `data/`), `raw/history.csv` |
 
-[`run_all.sh`](run_all.sh) runs all six steps for a fresh snapshot (2 to 3 hours, mostly the polite column fetch; the federal DataStore alone takes 25 to 75 minutes depending on how busy it is):
+[`run_all.sh`](run_all.sh) runs all five steps:
 
 ```bash
-./run_all.sh 2026-11-01
+./run_all.sh            # about 30 minutes: column lists only for tables that changed
+FULL=1 ./run_all.sh     # 2 to 3 hours: every column list again (what Sunday runs do)
 ```
 
-If a portal is down, its download is skipped and the build reuses its last snapshot in `raw/`. The run ends with a warning listing what was skipped.
+The federal DataStore alone takes 25 to 75 minutes in a full run, depending on how busy it is. `RAW_DIR` and `SITE_DIR` move the snapshots and the published site elsewhere (the nightly container keeps them on its volume).
+
+- **A portal is down:** its download is skipped and the build reuses its last snapshot. The run ends with a warning, and fails when a portal has had no new snapshot for 3 days.
+- **A portal suddenly lists more than 10% fewer datasets:** the new catalogue is treated as broken and the last snapshot is kept. To accept a real drop, delete that portal's `packages.json.gz` and run again.
+- **A run is stopped halfway:** snapshots are written next to the old ones and swapped in, and so is the site, so nothing is left half-written.
+
+The Québec sitemap crawl the project started with ([`scripts/crawl_sitemaps.py`](scripts/crawl_sitemaps.py), output `sitemaps/sitemap_urls.csv`) isn't part of the run; the index doesn't use it.
+
+## Nightly updates
+
+The hosted index runs on a workstation with [Coolify](https://coolify.io), from [`docker-compose.yml`](docker-compose.yml):
+
+- **`updater`** ([`Dockerfile`](Dockerfile), [`deploy/updater.sh`](deploy/updater.sh)) runs `run_all.sh` every night at 07:17 UTC (about 3 a.m. in eastern Canada), and once when it starts if the last run was more than a day ago (first start, or the machine was off). It keeps the snapshots, the history and the site on a volume, which it fills from this repository's snapshot on first start. Sunday runs fetch every column list again.
+- **`web`** ([`deploy/web.Dockerfile`](deploy/web.Dockerfile), [`deploy/Caddyfile`](deploy/Caddyfile)) serves the site from that volume, compressed. Coolify's proxy adds the domain and HTTPS.
+
+To set it up in Coolify: add a resource from this Git repository with the **Docker Compose** build pack, give the `web` service a domain (it listens on port 80), and optionally set `NOTIFY_URL` (for example an [ntfy](https://ntfy.sh) topic URL) to get a message when a run fails. Each push redeploys. The updater's log shows each run, including the warning list.
+
+Back up the volume's `raw/history.csv`: it's the only thing a fresh run can't rebuild.
 
 The repository itself was created and pushed with the GitHub CLI by [`publish.sh`](publish.sh).
 

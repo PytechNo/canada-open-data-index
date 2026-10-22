@@ -1,0 +1,12 @@
+.git
+backup
+ideas
+reports
+data
+sitemaps
+site/index.json
+site/detail
+docs/data
+raw/history.csv
+**/__pycache__
+**/*.new

@@ -3,6 +3,10 @@
 page: dataset page URL template ({name} or {id}); fq: CKAN filter that keeps only open datasets.
 Each platform has a reader in normalize.py (PLATFORMS).
 """
+# every call names the project, so a portal's admins can see who is calling and why; keep the name/version form:
+# data.ontario.ca answers 429 to "canada-open-data-index (+https://…)" without the "/1.0"
+USER_AGENT = "canada-open-data-index/1.0 (+https://github.com/PytechNo/canada-open-data-index)"
+
 PORTALS = {
     "QC": {"name": "Québec", "platform": "ckan", "api": "https://www.donneesquebec.ca/recherche/api/3/action",
            "page": "https://www.donneesquebec.ca/recherche/dataset/{name}"},

@@ -12,22 +12,33 @@ import os
 import re
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
-from portals import PORTALS
+from portals import PORTALS, USER_AGENT
 
 code, out_dir = sys.argv[1], sys.argv[2]
 portal = PORTALS[code]
 ROWS = 100 if portal["platform"] == "hub" else 500
 DELAY = 1.2
 out_path = os.path.join(out_dir, "packages.json.gz")
+before = len(json.load(gzip.open(out_path, "rt", encoding="utf-8"))) if os.path.exists(out_path) else 0
 
 
-def get(url, read=json.load):
-    req = urllib.request.Request(url, headers={"User-Agent": "dataset-index-builder (personal research)"})
-    with urllib.request.urlopen(req, timeout=120) as r:
-        return read(r)
+def get(url, read=json.load, pause=10):
+    # a 5xx or a call that hangs is usually the server catching its breath (open.canada.ca answered one catalogue
+    # page with 504, the Hub search hung twice in 20 calls), so try twice more; any other HTTP error is an answer
+    for attempt in (1, 2, 3):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+            with urllib.request.urlopen(req, timeout=120) as r:
+                return read(r)
+        except Exception as e:
+            if attempt == 3 or (isinstance(e, urllib.error.HTTPError) and e.code < 500):
+                raise
+            print(f"retrying in {pause} s after {type(e).__name__}: {e}"[:200], flush=True)
+            time.sleep(pause)
 
 
 def page(start):
@@ -94,7 +105,13 @@ for i, p in enumerate(packages if portal["platform"] == "hub" else [], 1):
     if i % 25 == 0:
         print(f"{i}/{len(packages)} items", flush=True)
 
+# a portal that suddenly lists far fewer datasets is more likely broken than cleaned up, so keep the last snapshot;
+# to accept a real drop, delete <out_dir>/packages.json.gz and run again
+if len(packages) < 0.9 * before:
+    raise SystemExit(f"got {len(packages)} datasets, {before} last time: kept the last snapshot")
 os.makedirs(out_dir, exist_ok=True)
-with gzip.open(out_path, "wt", encoding="utf-8") as f:
+# written next to the old one and swapped in, so a run stopped mid-write never leaves a broken snapshot
+with gzip.open(out_path + ".new", "wt", encoding="utf-8") as f:
     json.dump(packages, f, ensure_ascii=False)
+os.replace(out_path + ".new", out_path)
 print("saved", len(packages), "datasets to", out_path)

@@ -1,0 +1,7 @@
+# The site on the shared volume, over plain HTTP; Coolify's proxy puts the domain and HTTPS in front.
+# The volume is mounted at /srv/index because the Caddy image keeps its own state in /data.
+:80 {
+	root * /srv/index/site
+	encode zstd gzip
+	file_server
+}

@@ -11,6 +11,7 @@ import html
 import json
 import os
 import re
+import statistics
 import sys
 from collections import Counter
 from datetime import date, datetime
@@ -371,6 +372,17 @@ write_csv("datasets.csv", ds_rows, list(ds_rows[0].keys()))
 write_csv("files.csv", file_rows, list(file_rows[0].keys()))
 if column_rows:
     write_csv("columns.csv", column_rows, list(column_rows[0].keys()))
+# one row per portal: the comparison table's numbers, which run_all.sh adds to its history file each run
+portal_rows = []
+for code in provinces:
+    ds = [d for d in datasets if d["pr"] == code]
+    grades, status = Counter(d["gr"] for d in ds), Counter(d["st"] for d in ds)
+    portal_rows.append({"snapshot": snapshot, "province": code, "datasets": len(ds),
+                        **{f"grade_{g}": grades[g] for g in "ABCD"},
+                        "median_score": f"{statistics.median(d['sc'] for d in ds):g}",
+                        "with_column_list": sum(1 for d in ds if (d["cols"] or {}).get("c")),
+                        **{s: status[s] for s in STATUS_EN}})
+write_csv("portals.csv", portal_rows, list(portal_rows[0].keys()))
 
 print(json.dumps(summary, ensure_ascii=False))
 print("index.json bytes:", os.path.getsize(os.path.join(out_dir, "index.json")), "| detail bytes:",

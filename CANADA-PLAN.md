@@ -282,3 +282,25 @@ Phase 2 covers 84% of the new datasets with one fetcher, so it goes first after 
 - **AB:** `datastore_search` and `datastore_info` both answer HTTP 500 for every one of the 306 tables (sampled first, then all 306). Those datasets still get 10 API points, because the catalogue marks their files as DataStore tables; the build only flags a missing table on a 404. Whether a portal-wide 500 should cost the API points is left open.
 - **CA:** 1,134 of the 13,845 records have a DataStore table, and the tables hold 23.9 million rows in all. None of the columns has a description.
 - **ON:** the 436 tables hold 9.9 million rows. 8 of the 133 described tables describe only some of their columns.
+
+## 15. Nightly updates on a Coolify workstation (2026-10-22)
+
+**Why not commit each night.** The repository was already about 80 MB after nine commits, and every run rewrites all of `raw/` (34 MB; gzip stores the time, so even an unchanged catalogue gives a new file) plus `data/` (91 MB) and `docs/` (80 MB). That's about 1 GB of history a month. So the nightly run keeps its snapshots and publishes its site on the machine that runs it, and the repository keeps the code and a seed snapshot.
+
+**Where.** A workstation running Coolify, not GitHub Actions and Pages: no dependency on GitHub's schedule (which turns itself off after 60 days without commits), no US cloud runners for portals to block, and the files stay on a volume between runs.
+
+**How** (`docker-compose.yml`, `Dockerfile`, `deploy/`):
+- `updater` runs `run_all.sh` at 07:17 UTC (about 3 a.m. eastern), and once at start when the last run is more than a day old, so a night the machine was off is made up when it comes back. `/data/last-run` marks the attempt, not success, so a failing run waits for the next night. On first start it copies `raw/` and `docs/` from the image to the volume.
+- `web` is Caddy serving `/srv/index/site` read-only, with gzip/zstd (index.json: 19 MB, 4.0 MB on the wire). Coolify's proxy adds the domain and HTTPS. The volume isn't mounted at `/data` there because the Caddy image keeps its own state in `/data`.
+- `NOTIFY_URL` (optional) gets a plain-text POST when a run fails, for example an ntfy topic.
+
+**Changes to the pipeline:**
+- **Column lists only for changed tables.** Each column record stores its resource's last change (newest of `last_modified` and `metadata_modified`). A table is fetched again only when that date or the main resource changes, or the last try was a network error. On Sundays (or `FULL=1`) `run_all.sh` starts the file afresh, which also catches row counts and column notes that change without a new upload. Records from before this change have no date, so the first run after deploying fetches every table.
+- **Count check.** `fetch_catalogue.py` keeps the last snapshot when a portal returns more than 10% fewer datasets than last time. A real drop is accepted by deleting that portal's snapshot.
+- **No half-written files.** Catalogue snapshots are written next to the old one and swapped in (`os.replace`); the site is built in `<site>.new` and swapped with two renames.
+- **Stale portals fail the run.** A portal whose snapshot is 3+ days old makes `run_all.sh` exit 1 (one bad night only warns).
+- **History.** `build_index.py` writes `data/portals.csv` (per portal: datasets, grades, median score, column lists, freshness counts) and `run_all.sh` adds it to `raw/history.csv`, replacing that day's rows on a second run. The site serves the CSVs and the history under `/data/`.
+- **User-Agent** names the project and links the repository (`portals.USER_AGENT`): `canada-open-data-index/1.0 (+https://github.com/PytechNo/canada-open-data-index)`. data.ontario.ca answers 429 to the same string without `/1.0` (and to the bare repo URL in brackets), every time; the `name/version` form passes there and on every other endpoint the run calls (checked 2026-10-22).
+- The Québec sitemap crawl is no longer part of the run.
+
+**Checked:** the column fetch skips unchanged tables and fetches a changed one again (NT, 11 tables); the count check refuses a 341-dataset catalogue against a 1,000-dataset snapshot and leaves the old file; both images build; the updater seeds an empty volume, skips the start-up run when `/data/last-run` is recent and sleeps until 07:17 UTC; web serves the page and gzipped JSON; a column fetch works inside the container.
