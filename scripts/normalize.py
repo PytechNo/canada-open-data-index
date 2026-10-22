@@ -41,6 +41,11 @@ FREQ_MAPS = {  # portal value -> FREQ code
     "NT": {"monthly": "monthly", "quarterly": "quarterly", "yearly": "annual", "every5years": "quinquennial",
            "as_needed": "asNeeded", "infrequently": "irregular", "never": "notPlanned"},
     "NL": {"unknown": "notStated"},
+    # shortcut: "Bi-Annually" read as twice a year, like Ontario's "biannually"; NS doesn't define it
+    "NS": {"Daily": "daily", "Monthly": "monthly", "Bi-Monthly": "bimonthly", "Quarterly": "quarterly",
+           "Bi-Annually": "semiannual", "Annually": "annual", "As needed": "asNeeded", "One-time": "notPlanned",
+           "": "notStated"},
+    "NB": {"": "notStated"},
 }
 UNMAPPED = set()
 
@@ -64,6 +69,7 @@ QC_CHECKS = [  # Données Québec resource field, English label
 ]
 GEO_FORMATS = {"SHP", "KML", "KMZ", "GEOJSON", "GPKG", "GML", "WMS", "WFS", "WMTS", "ESRIREST", "FGDB", "GDB",
                "GEOTIFF", "MULTIPLE"}
+GEOMETRY_TYPES = {"Point", "MultiPoint", "Line", "MultiLine", "Polygon", "MultiPolygon", "Location"}  # Socrata
 
 
 def fmt_of(r):
@@ -244,7 +250,32 @@ def nl(p, rec, res, raw_dir):
                  doc=r.get("resource_type") == "guide", added=p.get("date_published"))
 
 
-FIELD_MAPS = {"QC": qc, "ON": on, "BC": bc, "AB": ab, "YT": yt, "NT": nt, "NL": nl}
+# Socrata maps get the portal's custom metadata fields (domain_metadata) as a dict instead of resources.
+
+def ns(p, rec, meta, raw_dir):
+    dept = meta.get("Detailed-Metadata_Department") or rec["publisher"]
+    # retired datasets say "ARCHIVED on <date>" here and promise "One-time" updates
+    archived = re.match(r"\s*archived\b", meta.get("Detailed-Metadata_Usage-Considerations", ""), re.I)
+    rec.update(
+        publisher=dept, parent=dept,
+        frequency="archives" if archived else freq("NS", meta.get("Detailed-Metadata_Frequency")),
+        time_coverage=meta.get("Detailed-Metadata_Time-Period-Coverage", "").strip(),
+        spatial=meta.get("Detailed-Metadata_Geographic-Region-Name", "").strip(),
+        language=meta.get("Detailed-Metadata_Language"),
+    )
+
+
+def nb(p, rec, meta, raw_dir):
+    # the department field is filled on half the records; the rest name the source (122 are Statistics Canada)
+    org = meta.get("Department-/-Ministère_Department-/-Ministère") or p["resource"].get("attribution") or rec["publisher"]
+    rec.update(publisher=org, parent=org, frequency=freq("NB", ""))
+    svc = meta.get("Map-Service-/-Service-de-carte_Map-Service-/-Service-de-carte")
+    if svc:
+        rec["files"].append({**rec["files"][0], "name": "Map service", "format": "ESRIREST", "data": False,
+                             "service": True, "queryable": False, "modified": None, "url": svc.strip()})
+
+
+FIELD_MAPS = {"QC": qc, "ON": on, "BC": bc, "AB": ab, "YT": yt, "NT": nt, "NL": nl, "NS": ns, "NB": nb}
 
 
 def ckan(code, raw_dir):
@@ -283,7 +314,46 @@ def ckan(code, raw_dir):
     return out
 
 
-PLATFORMS = {"ckan": ckan}
+def socrata(code, raw_dir):
+    """One record per Socrata dataset: a single table, exported as CSV and queryable through the SODA API."""
+    page = PORTALS[code]["page"]
+    out = []
+    for p in json.load(gzip.open(os.path.join(raw_dir, "packages.json.gz"), "rt", encoding="utf-8")):
+        r, c = p["resource"], p["classification"]
+        meta = {m["key"]: m["value"] for m in c.get("domain_metadata") or []}
+        url = page.format(id=r["id"])
+        added = r.get("publication_date") or r["createdAt"]
+        files = [{
+            "name": r["name"], "format": "CSV", "type": "", "data": True, "doc": False, "dictionary": False,
+            "service": False, "modified": r.get("data_updated_at"), "added": added, "size": None,
+            "url": f"https://{p['metadata']['domain']}/api/views/{r['id']}/rows.csv?accessType=DOWNLOAD",
+            "queryable": True, "page": url, "col_desc": "", "checks": {},
+        }]
+        views = r.get("page_views") or {}
+        rec = {
+            "province": code, "id": r["id"], "slug": r["id"], "title": r["name"], "url": url,
+            "publisher": p["owner"]["display_name"], "parent": p["owner"]["display_name"],
+            "themes": [t.strip() for t in [c.get("domain_category")] + (c.get("categories") or []) if t and t.strip()],
+            "tags": (c.get("domain_tags") or []) + (c.get("tags") or []),
+            "description": r.get("description"), "methodology": None, "frequency": None, "time_coverage": None,
+            "contact": "", "email": (r.get("contact_email") or "").strip(),
+            "licence_id": None, "licence_title": p["metadata"].get("license") or "Licence not specified",
+            "web": (r.get("attribution_link") or "").strip(), "created": added[:10],
+            "spatial": "", "geo": bool(GEOMETRY_TYPES & set(r.get("columns_datatype") or [])), "standard": "",
+            "reference": False, "language": None,
+            "views": views.get("page_views_total", 0), "views_recent": views.get("page_views_last_month", 0),
+            "data_date": None, "files": files,
+            # the column names are the CSV headers, so only a description counts as documenting a column
+            "columns": {"dataset_id": r["id"], "resource_id": r["id"], "resource_name": r["name"], "total": None,
+                        "fields": [{"id": n, "type": t, "label": None, "notes": d} for n, t, d in
+                                   zip(r["columns_name"], r["columns_datatype"], r["columns_description"])]},
+        }
+        FIELD_MAPS[code](p, rec, meta, raw_dir)
+        out.append(rec)
+    return out
+
+
+PLATFORMS = {"ckan": ckan, "socrata": socrata}
 
 
 def records(raw_root):

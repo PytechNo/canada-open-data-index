@@ -30,6 +30,8 @@ LICENCES = {
     "open government licence ontario": 10, "open government licence british columbia": 10,
     "open government licence alberta": 10, "open government licence yukon": 10,
     "open government licence northwest territories": 10, "open government licence newfoundland and labrador": 10,
+    "nova scotia open government licence": 10, "new brunswick open government licence": 10,
+    "canada open government licence": 10,
     "open government licence bc assessment": 10, "open government licence destination bc": 10,
     "open government licence skilledtradesbc": 10, "open government licence translink": 10,
     "open government licence municipality of north cowichan": 10, "elections bc open data licence": 10,

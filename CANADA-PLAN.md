@@ -63,12 +63,12 @@ The fields a portal has no equivalent for are `None`, not `""`, so scoring can t
 
 | Need | CKAN (QC, ON, BC, AB, YT, NT, NL) | Socrata (NS, NB) | ArcGIS Hub (MB, SK, PE) |
 |---|---|---|---|
-| Catalogue call | `package_search?rows=500&start=N&fq=<filter>` (existing loop) | `/api/catalog/v1?domains=D&search_context=D&only=dataset&limit=100&offset=N` | `/api/search/v1/collections/dataset/items?limit=100&startindex=N` |
+| Catalogue call | `package_search?rows=500&start=N&fq=<filter>` (existing loop) | `/api/catalog/v1?domains=D&search_context=D&only=dataset&order=name&limit=500&offset=N` | `/api/search/v1/collections/dataset/items?limit=100&startindex=N` |
 | Promised frequency | QC `update_frequency`; ON `update_frequency`; AB `updatefrequency`; YT, NT `update_frequency`; BC per-file `resource_update_cycle` (use the most frequent promise among data files) | NS `domain_metadata` "Detailed-Metadata_Frequency"; NB none | none |
 | Last data change | newest file `last_modified` (existing rule); ON also has `data_last_updated` | `data_updated_at` (true data date) | layer `editingInfo.lastEditDate` from the FeatureServer call, else item `modified` (with a warning that it's a metadata date) |
 | Columns | DataStore `datastore_search?limit=0` (QC, ON, NT); BC per-file `details` (column name, type, comment), no extra call | in catalogue: `columns_name`, `columns_datatype`, `columns_description` | one FeatureServer layer call per item gives `fields` |
 | Methodology | QC `methodologie`; BC `lineage_statement` | none | none |
-| Time coverage | QC `temporal`; AB `time_coverage_from/to`; YT `temporal_coverage_*`; NT `starting/ending_time_range`; ON file `data_range_start/end` | none | none |
+| Time coverage | QC `temporal`; AB `time_coverage_from/to`; YT `temporal_coverage_*`; NT `starting/ending_time_range`; ON file `data_range_start/end` | NS `domain_metadata` "Detailed-Metadata_Time-Period-Coverage"; NB none | none |
 | Portal checks | QC publisher checklist (`relidi_*`); ON Frictionless `validation_status` per file (a real test of the file) | none | none |
 | Views | QC `tracking_summary`; YT `visits`, `visit_90_days` | `page_views` | `numViews` |
 | Dataset page | `{site}/dataset/{name}` | `https://{domain}/d/{id}` | `{site}/datasets/{id}` |
@@ -117,7 +117,7 @@ Each phase ends with something that runs.
 | 0 | Decide the open questions in section 8 | answers written here |
 | 1 | `portals.py` with QC only; `normalize.py` with the CKAN normaliser and QC field map; rewrite the `build_index.py` loop to read common records; move raw to `raw/QC/` | **Rerun on today's Quebec raw data gives the same `datasets.csv`, `files.csv` and `columns.csv` as now, apart from the new `province` column** (diff is the test). **Done 2026-10-22:** all three CSVs match row for row, and `data.json` matches apart from the new `pr` and `u` keys |
 | 2 | CKAN provinces: ON, BC, AB, YT, NT (and NL if the portal is back); field maps; filters; frequency and licence tables | ~7,400 more datasets build; every frequency and licence value seen is mapped (the build stops and lists any that aren't). **Done 2026-10-22:** 7,510 more datasets (9,124 in all); decisions in section 10 |
-| 3 | Socrata fetcher and normaliser: NS, NB | 1,032 more; columns come from the catalogue |
+| 3 | Socrata fetcher and normaliser: NS, NB | 1,032 more; columns come from the catalogue. **Done 2026-10-22:** 1,032 more datasets (10,156 in all); the 9,124 earlier rows are unchanged; decisions in section 11 |
 | 4 | Hub fetcher and normaliser: MB, SK, PE, plus one FeatureServer call per item for fields and last edit date | 342 more |
 | 5 | Columns: DataStore for ON and NT through the existing `fetch_columns.py` (it already resumes and waits 1.2 s per call) | column lists for every platform that has them |
 | 6 | Split JSON, province filter, comparison table, README, `run_all.sh` loop | the site serves locally and on Pages |
@@ -175,3 +175,24 @@ Phase 2 covers 84% of the new datasets with one fetcher, so it goes first after 
 - **YT:** most records link to ArcGIS Online items and GeoYukon pages, not files. 428 of 493 promise "ad hoc" updates. Dataset pages are `open.yukon.ca/data/{name}`.
 - **NT:** descriptions are title-length (median 54 characters), no record gives a contact email, and 286 of 341 records only link to a StatsNWT web page.
 - **NL:** the portal still returned HTTP 500, so the index uses the 76 federal copies. Their file and modified dates are federal sync dates (64 records share 2026-02-06), so freshness uses the original publication date (2013–2016) and the frequency is "unknown".
+
+## 11. Phase 3 decisions and findings (2026-10-22)
+
+**Result** (snapshot 2026-10-22; columns come from the catalogue, row counts aren't in it):
+
+| Province | Datasets | A | B | C | D | Median score |
+|---|---|---|---|---|---|---|
+| NS | 713 | 5 | 451 | 156 | 101 | 71 |
+| NB | 319 | 0 | 115 | 147 | 57 | 59 |
+
+**How a Socrata dataset is read:**
+- One dataset is one table, so it gets one data file: the CSV export (`/api/views/{id}/rows.csv`), marked queryable because the SODA API serves the same rows. That gives the platform defaults from section 4: format 15, API 10. There are no portal checks, so 8 of 15.
+- Last data change is `data_updated_at`; "on portal since" is `publication_date`.
+- Column names are the CSV headers, so a column only counts as documented when it has a description (78 NS datasets, 7 NB).
+- Methodology gets the neutral half points on both portals. NS has a time coverage field (`Time-Period-Coverage`, filled on 555 of 713), so an empty one scores 0 there; NB has none, so neutral.
+- A record with no licence (NS 4, NB 2) is read as "Licence not specified": 0 points and the "No open licence" warning. The NS and NB Open Government Licences and the Canada one (4 NB records) score 10.
+- The fetcher checks that the number of distinct ids matches the catalogue count, because Socrata names aren't unique and a page boundary between two equal names could repeat or skip one.
+
+**Per-portal findings:**
+- **NS:** 141 datasets are retired: "[ARCHIVED]" in the title and "ARCHIVED on <date>" in Usage Considerations, with a "One-time" frequency. They're scored as archives (15 freshness points, "Archive" warning), as Quebec's are. The other 74 "One-time" records are "no updates planned". "Bi-Annually" (28) is read as twice a year, like Ontario's `biannually`; NS doesn't define it. Publisher is the `Department` field (28 departments). No record gives a contact email. 52 records name a data dictionary or guide in the free-text Related Documents field, but it isn't a linked file, so it isn't counted (46 of them already have column descriptions).
+- **NB:** no update frequency field at all, so all 319 are "Not stated". 122 records are Statistics Canada tables republished by the province; publisher is the `Department` field where filled (162), else the attribution. 31 GeoNB records give an ArcGIS map service URL, added as a service file. 152 of 319 haven't changed in 3+ years. No record gives a contact email.
