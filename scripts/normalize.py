@@ -6,10 +6,13 @@ value it hasn't seen before, so a portal changing its vocabulary can't slip thro
 """
 import functools
 import gzip
+import html
 import json
 import os
 import re
+import xml.etree.ElementTree as ET
 from collections import Counter
+from datetime import datetime, timezone
 
 from portals import PORTALS
 
@@ -47,6 +50,11 @@ FREQ_MAPS = {  # portal value -> FREQ code
            "": "notStated"},
     "NB": {"": "notStated"},
 }
+# ArcGIS Hub: the ISO 19115 maintenance frequency code (MaintFreqCd) in an item's formal metadata, if any
+FREQ_MAPS["MB"] = FREQ_MAPS["SK"] = FREQ_MAPS["PE"] = {
+    "001": "continuous", "002": "daily", "003": "weekly", "004": "biweekly", "005": "monthly", "006": "quarterly",
+    "007": "semiannual", "008": "annual", "009": "asNeeded", "010": "irregular", "011": "notPlanned",
+    "012": "notStated", "": "notStated"}
 UNMAPPED = set()
 
 QC_PARENTS = {
@@ -70,6 +78,9 @@ QC_CHECKS = [  # Données Québec resource field, English label
 GEO_FORMATS = {"SHP", "KML", "KMZ", "GEOJSON", "GPKG", "GML", "WMS", "WFS", "WMTS", "ESRIREST", "FGDB", "GDB",
                "GEOTIFF", "MULTIPLE"}
 GEOMETRY_TYPES = {"Point", "MultiPoint", "Line", "MultiLine", "Polygon", "MultiPolygon", "Location"}  # Socrata
+HUB_FILE_FORMATS = {"File Geodatabase": "FGDB", "Shapefile": "SHP", "CSV": "CSV"}  # Hub items that are one file
+ARCGIS_SYSTEM_FIELDS = {"esriFieldTypeOID", "esriFieldTypeGeometry"}  # Hub's own table leaves these out
+EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 
 
 def fmt_of(r):
@@ -275,7 +286,44 @@ def nb(p, rec, meta, raw_dir):
                              "service": True, "queryable": False, "modified": None, "url": svc.strip()})
 
 
-FIELD_MAPS = {"QC": qc, "ON": on, "BC": bc, "AB": ab, "YT": yt, "NT": nt, "NL": nl, "NS": ns, "NB": nb}
+# Hub maps get the item's formal metadata values (hub_metadata) instead of resources. Hub only has free licence
+# text, so each portal lists (pattern, licence title) rules for it.
+
+def hub_licence(item, rules):
+    """The first rule the licence text matches names the licence; text no rule matches is passed on as the
+    title, so the build stops on it."""
+    text = " ".join(html.unescape(re.sub(r"<[^>]+>", " ", item.get("licenseInfo") or "")).split())
+    if not text:
+        return "Licence not specified"
+    return next((title for pattern, title in rules if re.search(pattern, text, re.I)), text[:100])
+
+
+def mb(p, rec, meta, raw_dir):
+    # every licence link goes to manitoba.ca/legal/copyright.html, which is the OpenMB licence
+    rec["licence_title"] = hub_licence(p["properties"], [
+        (r"open ?data|openmb|ouvert|legal/copyright", "OpenMB Information and Data Use Licence"),
+        (r"^(disclaimer|this boundary is not|manitoba agriculture makes)", "Licence not specified")])
+
+
+def sk(p, rec, meta, raw_dir):
+    rec["licence_title"] = hub_licence(p["properties"], [
+        (r"open government licen[cs]e\W+canada", "Open Government Licence - Canada"),
+        (r"unrestricted", "Government of Saskatchewan Standard Unrestricted Use Data Licence"),
+        (r"^(although|monitoring station)", "Licence not specified")])
+
+
+def pe(p, rec, meta, raw_dir):
+    # credits read "Contact Information: <name>, <phone> Contact Email: <email>"
+    contact = re.match(r"\s*Contact Information:\s*([^,\n\d–]+?)\s*(?:[,\n\d–]|Contact Email|$)",
+                       p["properties"].get("accessInformation") or "")
+    rec["contact"] = contact.group(1) if contact else ""
+    rec["licence_title"] = hub_licence(p["properties"], [
+        (r"open government licen[cs]e\W+prince edward island", "Open Government Licence - Prince Edward Island"),
+        (r"^care has been taken", "Licence not specified")])
+
+
+FIELD_MAPS = {"QC": qc, "ON": on, "BC": bc, "AB": ab, "YT": yt, "NT": nt, "NL": nl, "NS": ns, "NB": nb,
+              "MB": mb, "SK": sk, "PE": pe}
 
 
 def ckan(code, raw_dir):
@@ -353,7 +401,84 @@ def socrata(code, raw_dir):
     return out
 
 
-PLATFORMS = {"ckan": ckan, "socrata": socrata}
+def ms_date(t):
+    return datetime.fromtimestamp(t / 1000, timezone.utc).isoformat() if t else None
+
+
+def hub_metadata(xml_text):
+    """The values read from an item's formal (ISO 19115) metadata; {} when it has none. Formal metadata is
+    optional and not on Hub's dataset form, so a value left empty there is read as missing, not as 0."""
+    if not xml_text:
+        return {}
+    root = ET.fromstring(xml_text)
+    code = root.find("dataIdInfo/resMaint/maintFreq/MaintFreqCd")
+    return {"frequency": code.get("value") if code is not None else "",
+            "revised": root.findtext("dataIdInfo/idCitation/date/reviseDate"),
+            "lineage": (root.findtext("dqInfo/dataLineage/statement") or "").strip() or None,
+            "email": (root.findtext("dataIdInfo/idPoC/rpCntInfo/cntAddress/eMailAdd") or "").strip()}
+
+
+def hub(code, raw_dir):
+    """One record per Hub item. A feature service gives one CSV download per layer (Hub exports any layer as
+    CSV or GeoJSON) plus the service itself; an item that is a single file (file geodatabase, shapefile, CSV)
+    is that file."""
+    page = PORTALS[code]["page"]
+    site = PORTALS[code]["api"].split("/api/")[0]
+    out = []
+    for p in json.load(gzip.open(os.path.join(raw_dir, "packages.json.gz"), "rt", encoding="utf-8")):
+        it, layers = p["properties"], p.get("layers") or []
+        meta = hub_metadata(p.get("metadata_xml"))
+        url = page.format(id=it["id"])
+        added = ms_date(it["created"])
+        base = {"type": "", "data": True, "doc": False, "dictionary": False, "service": False, "added": added,
+                "size": None, "queryable": False, "page": url, "col_desc": "", "checks": {}}
+        if it.get("url"):
+            # dataLastEditDate leaves out schema and service changes that lastEditDate also counts
+            files = [{**base, "name": l["name"], "format": "CSV",
+                      "modified": ms_date((l.get("editingInfo") or {}).get("dataLastEditDate")
+                                          or (l.get("editingInfo") or {}).get("lastEditDate")),
+                      "url": f"{site}/api/download/v1/items/{it['id']}/csv?layers={l['id']}"} for l in layers]
+            files.append({**base, "name": "Feature service", "format": "ESRIREST", "data": False, "service": True,
+                          "modified": None, "url": it["url"]})
+        else:
+            files = [{**base, "name": it.get("name") or it["title"], "modified": None, "size": it.get("size"),
+                      "format": HUB_FILE_FORMATS.get(it["type"], it["type"].upper()),
+                      "url": f"https://www.arcgis.com/sharing/rest/content/items/{it['id']}/data"}]
+        main = next((l for l in layers if l.get("fields")), None)
+        rec = {
+            "province": code, "id": it["id"], "slug": it["id"], "title": it["title"], "url": url,
+            "publisher": it.get("source") or f"Government of {PORTALS[code]['name']}",
+            "parent": it.get("source") or f"Government of {PORTALS[code]['name']}",
+            "themes": [c.rsplit("/", 1)[-1] for c in it.get("categories") or []], "tags": it.get("tags") or [],
+            "description": it.get("description") or it.get("snippet"), "methodology": meta.get("lineage"),
+            "frequency": freq(code, meta.get("frequency")), "time_coverage": None, "contact": "",
+            "email": meta.get("email") or next(iter(EMAIL.findall(it.get("accessInformation") or "")), ""),
+            # a Creative Commons licence picked from Hub's list; any other licence is only free text
+            "licence_id": it["license"] if (it.get("license") or "").lower().startswith("cc") else None,
+            "licence_title": None, "web": "", "created": added[:10], "spatial": "",
+            "geo": any(l.get("geometryType") for l in layers) or HUB_FILE_FORMATS.get(it["type"]) in GEO_FORMATS,
+            "standard": "", "reference": False, "language": None, "views": it.get("numViews") or 0,
+            "views_recent": 0,
+            # used only when no layer has an edit date: the publisher's revision date, else the item's own
+            # modified date, which changes with any metadata edit
+            "data_date": meta.get("revised") or ms_date(it["modified"]),
+            "data_date_src": "publisher's date" if meta.get("revised") else "metadata date",
+            "files": files,
+            # field aliases are display names, so only a field description counts as documenting a column
+            "columns": main and {
+                "dataset_id": it["id"], "resource_id": f"{it['id']}/{main['id']}", "resource_name": main["name"],
+                "total": None, "fields": [{"id": f["name"], "type": f["type"].removeprefix("esriFieldType"),
+                                           "label": None,
+                                           # a JSON string: {"value": "…", "fieldValueType": "…"}, or "null"
+                                           "notes": (json.loads(f.get("description") or "{}") or {}).get("value")}
+                                          for f in main["fields"] if f["type"] not in ARCGIS_SYSTEM_FIELDS]},
+        }
+        FIELD_MAPS[code](p, rec, meta, raw_dir)
+        out.append(rec)
+    return out
+
+
+PLATFORMS = {"ckan": ckan, "socrata": socrata, "hub": hub}
 
 
 def records(raw_root):

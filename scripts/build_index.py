@@ -31,7 +31,9 @@ LICENCES = {
     "open government licence alberta": 10, "open government licence yukon": 10,
     "open government licence northwest territories": 10, "open government licence newfoundland and labrador": 10,
     "nova scotia open government licence": 10, "new brunswick open government licence": 10,
-    "canada open government licence": 10,
+    "canada open government licence": 10, "openmb information and data use licence": 10,
+    "government of saskatchewan standard unrestricted use data licence": 10,
+    "open government licence prince edward island": 10,
     "open government licence bc assessment": 10, "open government licence destination bc": 10,
     "open government licence skilledtradesbc": 10, "open government licence translink": 10,
     "open government licence municipality of north cowichan": 10, "elections bc open data licence": 10,
@@ -126,7 +128,7 @@ for p in recs:
     dated = [d for d in dated if d]
     last_src = "file modified"
     if not dated and as_date(p["data_date"]):
-        dated, last_src = [as_date(p["data_date"])], "publisher's date"
+        dated, last_src = [as_date(p["data_date"])], p.get("data_date_src", "publisher's date")
     if not dated:
         dated = [d for d in (as_date(r["added"]) for r in (data_res or res)) if d]
         last_src = "file added"
@@ -199,6 +201,8 @@ for p in recs:
         flags.append("Archive: kept for history, not updated")
     elif status == "unknown":
         flags.append("No file dates, so freshness can't be checked")
+    if last_src == "metadata date":
+        flags.append("No data date: last change is when the catalogue entry was last edited")
     if p["frequency"] == "notStated":
         flags.append("No update frequency promised")
     if not data_res:

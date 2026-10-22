@@ -27,4 +27,14 @@ PORTALS = {
     "NB": {"name": "New Brunswick", "platform": "socrata",
            "api": "https://gnb.socrata.com/api/catalog/v1?domains=gnb.socrata.com&search_context=gnb.socrata.com&only=dataset",
            "page": "https://gnb.socrata.com/d/{id}"},
+    # ArcGIS Hub: api is the site's search API for its "dataset" collection
+    "MB": {"name": "Manitoba", "platform": "hub",
+           "api": "https://geoportal.gov.mb.ca/api/search/v1/collections/dataset/items",
+           "page": "https://geoportal.gov.mb.ca/datasets/{id}"},
+    "SK": {"name": "Saskatchewan", "platform": "hub",
+           "api": "https://geohub.saskatchewan.ca/api/search/v1/collections/dataset/items",
+           "page": "https://geohub.saskatchewan.ca/datasets/{id}"},
+    "PE": {"name": "Prince Edward Island", "platform": "hub",
+           "api": "https://data.princeedwardisland.ca/api/search/v1/collections/dataset/items",
+           "page": "https://data.princeedwardisland.ca/datasets/{id}"},
 }

@@ -41,7 +41,7 @@ The federal portal (open.canada.ca, CKAN, 48,151 records) also holds 11,746 reco
 scripts/
   portals.py          # one dict: code -> name, platform, API base, filter, field map
   fetch_catalogue.py  # python scripts/fetch_catalogue.py ON raw/ON   (ckan | socrata | hub)
-  fetch_columns.py    # CKAN DataStore (QC, ON, NT) and Hub layer JSON; skipped where the catalogue already has columns
+  fetch_columns.py    # CKAN DataStore (QC, ON, NT); skipped where the catalogue already has columns (Hub layers come with the catalogue)
   normalize.py        # raw/<code>/ -> common records
   build_index.py      # scoring, warnings, CSV and JSON, all provinces
   make_site.py        # unchanged except copying several JSON files
@@ -63,11 +63,11 @@ The fields a portal has no equivalent for are `None`, not `""`, so scoring can t
 
 | Need | CKAN (QC, ON, BC, AB, YT, NT, NL) | Socrata (NS, NB) | ArcGIS Hub (MB, SK, PE) |
 |---|---|---|---|
-| Catalogue call | `package_search?rows=500&start=N&fq=<filter>` (existing loop) | `/api/catalog/v1?domains=D&search_context=D&only=dataset&order=name&limit=500&offset=N` | `/api/search/v1/collections/dataset/items?limit=100&startindex=N` |
-| Promised frequency | QC `update_frequency`; ON `update_frequency`; AB `updatefrequency`; YT, NT `update_frequency`; BC per-file `resource_update_cycle` (use the most frequent promise among data files) | NS `domain_metadata` "Detailed-Metadata_Frequency"; NB none | none |
-| Last data change | newest file `last_modified` (existing rule); ON also has `data_last_updated` | `data_updated_at` (true data date) | layer `editingInfo.lastEditDate` from the FeatureServer call, else item `modified` (with a warning that it's a metadata date) |
+| Catalogue call | `package_search?rows=500&start=N&fq=<filter>` (existing loop) | `/api/catalog/v1?domains=D&search_context=D&only=dataset&order=name&limit=500&offset=N` | `/api/search/v1/collections/dataset/items?sortBy=properties.title&limit=100&startindex=N`, then each item's live record from ArcGIS Online |
+| Promised frequency | QC `update_frequency`; ON `update_frequency`; AB `updatefrequency`; YT, NT `update_frequency`; BC per-file `resource_update_cycle` (use the most frequent promise among data files) | NS `domain_metadata` "Detailed-Metadata_Frequency"; NB none | ISO `MaintFreqCd` in the item's formal metadata, where filled |
+| Last data change | newest file `last_modified` (existing rule); ON also has `data_last_updated` | `data_updated_at` (true data date) | newest layer `editingInfo.dataLastEditDate` (else `lastEditDate`) from the FeatureServer call, else the metadata `reviseDate`, else item `modified` (with a warning that it's a metadata date) |
 | Columns | DataStore `datastore_search?limit=0` (QC, ON, NT); BC per-file `details` (column name, type, comment), no extra call | in catalogue: `columns_name`, `columns_datatype`, `columns_description` | one FeatureServer layer call per item gives `fields` |
-| Methodology | QC `methodologie`; BC `lineage_statement` | none | none |
+| Methodology | QC `methodologie`; BC `lineage_statement` | none | formal metadata lineage statement, where filled |
 | Time coverage | QC `temporal`; AB `time_coverage_from/to`; YT `temporal_coverage_*`; NT `starting/ending_time_range`; ON file `data_range_start/end` | NS `domain_metadata` "Detailed-Metadata_Time-Period-Coverage"; NB none | none |
 | Portal checks | QC publisher checklist (`relidi_*`); ON Frictionless `validation_status` per file (a real test of the file) | none | none |
 | Views | QC `tracking_summary`; YT `visits`, `visit_90_days` | `page_views` | `numViews` |
@@ -85,7 +85,8 @@ The fields a portal has no equivalent for are `None`, not `""`, so scoring can t
 | ON `historical` | `archives` |
 | ON `never` | `notPlanned` |
 | AB, YT, NT, NS, BC values | lowercase, then the same table; the full list comes from a facet call at build time |
-| no field (NB, MB, SK, PE) | new code `notStated`: scored like "no fixed schedule", plus the warning "No update frequency promised" |
+| MB, SK, PE ISO codes `001` continual … `011` notPlanned | same meaning (`004` fortnightly is `biweekly`, `007` biannually is `semiannual`) |
+| no field (NB; MB, SK, PE items whose metadata has none) | new code `notStated`: scored like "no fixed schedule", plus the warning "No update frequency promised" |
 
 ## 4. Scoring across provinces
 
@@ -118,7 +119,7 @@ Each phase ends with something that runs.
 | 1 | `portals.py` with QC only; `normalize.py` with the CKAN normaliser and QC field map; rewrite the `build_index.py` loop to read common records; move raw to `raw/QC/` | **Rerun on today's Quebec raw data gives the same `datasets.csv`, `files.csv` and `columns.csv` as now, apart from the new `province` column** (diff is the test). **Done 2026-10-22:** all three CSVs match row for row, and `data.json` matches apart from the new `pr` and `u` keys |
 | 2 | CKAN provinces: ON, BC, AB, YT, NT (and NL if the portal is back); field maps; filters; frequency and licence tables | ~7,400 more datasets build; every frequency and licence value seen is mapped (the build stops and lists any that aren't). **Done 2026-10-22:** 7,510 more datasets (9,124 in all); decisions in section 10 |
 | 3 | Socrata fetcher and normaliser: NS, NB | 1,032 more; columns come from the catalogue. **Done 2026-10-22:** 1,032 more datasets (10,156 in all); the 9,124 earlier rows are unchanged; decisions in section 11 |
-| 4 | Hub fetcher and normaliser: MB, SK, PE, plus one FeatureServer call per item for fields and last edit date | 342 more |
+| 4 | Hub fetcher and normaliser: MB, SK, PE, plus one FeatureServer call per item for fields and last edit date | 342 more. **Done 2026-10-22:** 342 more datasets (10,498 in all); the 10,156 earlier rows are unchanged; decisions in section 12 |
 | 5 | Columns: DataStore for ON and NT through the existing `fetch_columns.py` (it already resumes and waits 1.2 s per call) | column lists for every platform that has them |
 | 6 | Split JSON, province filter, comparison table, README, `run_all.sh` loop | the site serves locally and on Pages |
 | 7 | Rename the repo (if chosen) and publish | live link works |
@@ -196,3 +197,30 @@ Phase 2 covers 84% of the new datasets with one fetcher, so it goes first after 
 **Per-portal findings:**
 - **NS:** 141 datasets are retired: "[ARCHIVED]" in the title and "ARCHIVED on <date>" in Usage Considerations, with a "One-time" frequency. They're scored as archives (15 freshness points, "Archive" warning), as Quebec's are. The other 74 "One-time" records are "no updates planned". "Bi-Annually" (28) is read as twice a year, like Ontario's `biannually`; NS doesn't define it. Publisher is the `Department` field (28 departments). No record gives a contact email. 52 records name a data dictionary or guide in the free-text Related Documents field, but it isn't a linked file, so it isn't counted (46 of them already have column descriptions).
 - **NB:** no update frequency field at all, so all 319 are "Not stated". 122 records are Statistics Canada tables republished by the province; publisher is the `Department` field where filled (162), else the attribution. 31 GeoNB records give an ArcGIS map service URL, added as a service file. 152 of 319 haven't changed in 3+ years. No record gives a contact email.
+
+## 12. Phase 4 decisions and findings (2026-10-22)
+
+**Result** (snapshot 2026-10-22; columns come from the FeatureServer layer call, row counts aren't fetched):
+
+| Province | Datasets | A | B | C | D | Median score |
+|---|---|---|---|---|---|---|
+| MB | 123 | 0 | 50 | 64 | 9 | 63 |
+| SK | 129 | 0 | 35 | 73 | 21 | 62 |
+| PE | 90 | 0 | 1 | 78 | 11 | 58 |
+
+**How a Hub item is read:**
+- The fetcher pages the site's search API by title (same distinct-id check as Socrata), then makes three kinds of extra call, 1.2 s apart: one ArcGIS Online search per 50 items for the live item records, one `/layers` call per service, and one formal metadata call per item that has metadata. The live record wins because Hub's search index lags: 49 SK items had a `modified` date days behind the item (47 by 76 days) and 14 had older licence text. Thumbnails embedded in the metadata are dropped (5.3 MB of MB's 7.9 MB of metadata).
+- A feature service gives one CSV data file per layer (Hub's download API, `{site}/api/download/v1/items/{id}/csv?layers=N`) plus the service itself, so format 15 and API 7. An item that is one file (MB 2 file geodatabases; SK 9 shapefiles, 3 file geodatabases, 1 CSV) is that file, with no API. No portal checks, so 8 of 15.
+- Last change is the newest layer's `editingInfo.dataLastEditDate`, else `lastEditDate`. `lastEditDate` also moves on schema and service changes (40 of 130 MB layers differ; one moved in 2025 with data unchanged since 2022), and Hub's own "Data updated" uses the data date. With no layer date, the metadata revision date (`reviseDate`) counts as the publisher's date, else the item's `modified` date with the new warning "No data date: last change is when the catalogue entry was last edited" (MB 2, SK 65, PE 18).
+- Hub's page shows the metadata revision date ahead of the layer date; the index doesn't, because the layer date is recorded by the server, as file dates are elsewhere. On 24 of the 27 MB items that have both, the layer date is later (e.g. "AW Case Outcomes V03": revised 2022-01-24 in the metadata, data edited 2026-07-22), so the index shows a later date than the page for those (SK 10, PE 3).
+- Frequency is the ISO maintenance frequency (`MaintFreqCd`) in the item's formal metadata (filled on MB 43, SK 22, PE 1); the rest are "Not stated". Hub also shows a frequency for updating the metadata itself, which isn't used.
+- Formal metadata is optional and not on Hub's dataset form, so an empty value there is read as missing, not as 0: methodology is the lineage statement where filled (MB 31, SK 18), else neutral. No item fills a time extent, so time coverage is neutral everywhere. Contact email is the metadata point of contact, else an email in the item's credits text.
+- Columns are the first layer's fields without the object id and geometry, as Hub's table shows them. Field aliases are display names, so only a field description counts as documenting a column (MB 1, SK 3, PE 0 datasets). Hub's table also leaves out `DateOnly` fields, so one MB dataset has 11 columns here and 10 on the page.
+- Licences are free text (`licenseInfo`) on all three, so each field map lists patterns that name a licence; text no pattern matches goes to the build as the title, so the build stops on it. The OpenMB Information and Data Use Licence (manitoba.ca/legal/copyright.html), the Government of Saskatchewan Standard Unrestricted Use Data Licence v2.0 (commercial use allowed, checked in the PDF), OGL-Canada and OGL-PEI score 10. Disclaimers that name no licence, and empty text, are "Licence not specified" (0).
+- Publisher is the item's `source` where filled, else "Government of <province>".
+
+**Per-portal findings:**
+- **MB:** 121 feature services and 2 file geodatabases. Titles and descriptions are bilingual in one field (median description 1,377 characters). The licence text is written 18 ways; all name or link to the OpenMB licence except 5 disclaimers. 74 items give "Manitoba Maps" as the source, so the publisher is coarse. 34 of the 43 stated frequencies are "as needed". 57 had a data edit in 2026, 36 haven't changed in 3+ years.
+- **SK:** a map portal, not a general one: 116 feature services (3 backed by map service layers), 9 shapefiles, 3 file geodatabases, 1 CSV. 60 services run on the province's ArcGIS Server without edit tracking, so 65 records fall back on the item date. 10 items bundle 2 to 92 layers (the geology and petroleum services); each layer is a CSV file in `files.csv` and the columns are the first layer's. 5 services are broken: 2 need a sign-in ("Token Required") and 3 point to layers the service no longer publishes, so they have no data files. The 9 road network layers are each listed twice, as a feature service and as a shapefile; the 8 that promise continual updates were edited 2026-10-18 as services but last revised 2025-05-09 as shapefiles, so each pair is on time once and overdue once.
+- **PE:** 90 feature services, 72 on ArcGIS Online and 18 on the province's server. 24 have no licence (Hub shows "No licence provided"). There's no source field, so the publisher is "Government of Prince Edward Island"; the contact name and email come from the credits text ("Contact Information: … Contact Email: …", 57 and 55 filled). Descriptions are short (median 106 characters, 16 items have only the summary), so 54 get "Very short description". One item states a frequency (daily). 51 of the 64 numbered "OD" tables last changed in March 2024.
+- **All three:** the Hub search API hung on a page twice in about 20 calls and the fetch stopped after its 120 s timeout; running it again worked.
