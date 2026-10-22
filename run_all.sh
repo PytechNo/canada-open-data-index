@@ -8,7 +8,7 @@ SNAPSHOT="${1:-$(date +%F)}"
 failed=""
 
 python scripts/crawl_sitemaps.py sitemaps/sitemap_urls.csv || failed="$failed sitemaps"
-for code in QC ON BC AB YT NT NL NS NB MB SK PE CA; do
+for code in $(cd scripts && python -c "from portals import PORTALS; print(*PORTALS)"); do
   python scripts/fetch_catalogue.py "$code" "raw/$code" || failed="$failed $code"
 done
 # the Quebec extras download to .new first, so a failure never replaces the last good copy

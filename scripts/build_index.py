@@ -325,7 +325,10 @@ for d in datasets:
     if d["s"] in prov:
         raise SystemExit(f"Duplicate dataset slug in {d['pr']}: {d['s']}")
     prov[d["s"]] = {k: v for k, v in d.items() if k not in INDEX_KEYS}
-write_json("index.json", {"summary": summary, "freq": {k: v[0] for k, v in FREQ.items()}, "datasets": index})
+# code: [name, portal host], in portals.py order, for the province filter and comparison table
+provinces = {c: [cfg["name"], cfg["page"].split("/")[2]] for c, cfg in PORTALS.items() if c in details}
+write_json("index.json", {"summary": summary, "freq": {k: v[0] for k, v in FREQ.items()}, "provinces": provinces,
+                          "datasets": index})
 os.makedirs(os.path.join(out_dir, "detail"), exist_ok=True)
 for code, prov in details.items():
     write_json(os.path.join("detail", f"{code}.json"), prov)

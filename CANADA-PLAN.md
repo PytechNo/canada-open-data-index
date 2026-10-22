@@ -121,7 +121,7 @@ Each phase ends with something that runs.
 | 3 | Socrata fetcher and normaliser: NS, NB | 1,032 more; columns come from the catalogue. **Done 2026-10-22:** 1,032 more datasets (10,156 in all); the 9,124 earlier rows are unchanged; decisions in section 11 |
 | 4 | Hub fetcher and normaliser: MB, SK, PE, plus one FeatureServer call per item for fields and last edit date | 342 more. **Done 2026-10-22:** 342 more datasets (10,498 in all); the 10,156 earlier rows are unchanged; decisions in section 12 |
 | 5 | Columns: DataStore for ON and NT through the existing `fetch_columns.py` (it already resumes and waits 1.2 s per call) | column lists for every platform that has them |
-| 6 | Split JSON, province filter, comparison table, README, `run_all.sh` loop | the site serves locally and on Pages. **Split done 2026-10-22** (section 13); province filter, comparison table and the Canada-wide README and page header are still to do |
+| 6 | Split JSON, province filter, comparison table, README, `run_all.sh` loop | the site serves locally and on Pages. **Split done 2026-10-22** (section 13). **Rest done 2026-10-22:** portal filter, portal name on each row and in the dataset panel, "Portals compared" table at the top (sorted by median score, Nunavut as "no open data portal"; clicking a portal filters the list), Canada-wide page header, method notes and README, `run_all.sh` reads its portal list from `portals.py`, and `data/` and `docs/` rebuilt for all 24,343 datasets. Checked locally; Pages updates on the next push |
 | 7 | Rename the repo (if chosen) and publish | live link works |
 
 Phase 2 covers 84% of the new datasets with one fetcher, so it goes first after the refactor.

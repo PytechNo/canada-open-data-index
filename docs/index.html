@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
-<title>Quebec Open Data Index</title>
+<title>Canada Open Data Index</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -54,7 +54,7 @@ button, input, select { font: inherit; color: inherit; }
 .figures li { display: flex; align-items: baseline; gap: 6px; color: var(--muted); }
 .figures b { font-family: var(--font-mono); font-weight: 500; color: var(--ink); font-size: 18px; }
 .dists { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px 32px; margin-top: 20px; }
-.dist h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 6px; font-weight: 700; }
+.dist h2, .compare h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 6px; font-weight: 700; }
 .bar { display: flex; height: 30px; border-radius: 6px; overflow: hidden; background: var(--sunken); }
 .bar button { border: 0; padding: 0 6px; min-width: 0; cursor: pointer; font-family: var(--font-mono); font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: clip; transition: filter .15s; }
 .bar button:hover { filter: brightness(.94); }
@@ -62,6 +62,13 @@ button, input, select { font: inherit; color: inherit; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; font-size: 13px; color: var(--muted); }
 .legend span { display: inline-flex; align-items: center; gap: 5px; }
 .legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.compare { margin-top: 22px; }
+.compare td { vertical-align: middle; }
+.compare .site { font-size: 12.5px; color: var(--muted); }
+.compare .note { margin: 6px 0 0; font-size: 13px; color: var(--muted); max-width: 90ch; }
+.mini { display: flex; height: 12px; min-width: 120px; border-radius: 3px; overflow: hidden; background: var(--sunken); }
+.linkish { all: unset; cursor: pointer; color: var(--accent); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+.linkish:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* Tones */
 .t-good { background: var(--good-soft); color: var(--good); }
@@ -173,9 +180,17 @@ details.fold summary { cursor: pointer; font-weight: 700; font-size: 14px; }
 
 <header class="top gutter">
   <div class="inner">
-    <h1>Quebec Open Data Index</h1>
-    <p class="lede">Every dataset published on donneesquebec.ca, with what it contains, how often it is supposed to be updated, when it last changed, and a quality score to help you decide whether to rely on it. Unofficial. Built from the portal's public catalogue API.</p>
+    <h1>Canada Open Data Index</h1>
+    <p class="lede">Every dataset on the open data portals of Canada's provinces and territories, plus the federal core collection on open.canada.ca: what it contains, how often it is supposed to be updated, when it last changed, and a quality score to help you decide whether to rely on it. Every portal is scored by the same rules, so they can be compared. Unofficial. Built from each portal's public catalogue API.</p>
     <ul class="figures" id="figures"><li>Loading the catalogue…</li></ul>
+    <div class="compare">
+      <h2>Portals compared</h2>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Portal</th><th>Datasets</th><th>Median score</th><th>Grades</th><th>Freshness</th><th>With a column list</th></tr></thead>
+        <tbody id="compare"></tbody>
+      </table></div>
+      <p class="note">Sorted by median score. Bar colours follow the grade and freshness legends below. Newfoundland and Labrador's portal answered every call with an error, so its datasets are the copies on open.canada.ca. Federal covers the departments' core open data collection only.</p>
+    </div>
     <div class="dists">
       <div class="dist"><h2>Quality grade</h2><div class="bar" id="gradeBar"></div><div class="legend" id="gradeLegend"></div></div>
       <div class="dist"><h2>Freshness against the promised schedule</h2><div class="bar" id="freshBar"></div><div class="legend" id="freshLegend"></div></div>
@@ -192,6 +207,7 @@ details.fold summary { cursor: pointer; font-weight: 700; font-size: 14px; }
           <label for="q">Search</label>
           <input type="search" id="q" placeholder="Title, topic, column name…" autocomplete="off">
         </div>
+        <div class="fgroup"><label for="fProv">Portal</label><select id="fProv"></select></div>
         <div class="fgroup"><label for="fPub">Publisher</label><select id="fPub"></select></div>
         <div class="fgroup"><label for="fTheme">Theme</label><select id="fTheme"></select></div>
         <div class="fgroup"><label for="fFreq">Promised update frequency</label><select id="fFreq"></select></div>
@@ -205,7 +221,7 @@ details.fold summary { cursor: pointer; font-weight: 700; font-size: 14px; }
           <label class="check"><input type="checkbox" id="tDesc"> Column descriptions</label>
           <label class="check"><input type="checkbox" id="tCols"> Column list in this index</label>
           <label class="check"><input type="checkbox" id="tGeo"> Geospatial data</label>
-          <label class="check"><input type="checkbox" id="tStd"> Follows a Québec data standard</label>
+          <label class="check"><input type="checkbox" id="tStd"> Follows a data standard</label>
         </div>
         <button class="reset" id="reset" type="button">Clear all filters</button>
       </details>
@@ -225,7 +241,7 @@ details.fold summary { cursor: pointer; font-weight: 700; font-size: 14px; }
           </select>
         </label>
       </div>
-      <div class="list" id="list"><div class="empty">Loading 1,614 datasets…</div></div>
+      <div class="list" id="list"><div class="empty">Loading the datasets…</div></div>
       <button class="more" id="more" type="button" hidden>Show 50 more</button>
     </section>
   </div>
@@ -241,24 +257,23 @@ details.fold summary { cursor: pointer; font-weight: 700; font-size: 14px; }
         <tbody>
           <tr><td>Freshness</td><td class="num">25</td><td>Compares the newest data file date with the promised frequency. On schedule (within 1.5× the interval plus a week): 25. Late (within 3×): 12. Overdue: 0. With no fixed schedule: changed in the last year 18, in 1–3 years 10, older 4. Archives 15. No dates 10.</td></tr>
           <tr><td>Open format</td><td class="num">15</td><td>15 for an open machine-readable format (CSV, JSON, GeoJSON, XML, GeoPackage, Shapefile, KML…). 9 for Excel, file geodatabases, ZIP or map services only. 0 if the data is only PDF, web pages or images.</td></tr>
-          <tr><td>API access</td><td class="num">10</td><td>10 when at least one file is loaded in the portal's DataStore and can be queried row by row. 7 for a web map or feature service. 0 otherwise.</td></tr>
-          <tr><td>Documentation</td><td class="num">25</td><td>Description length (up to 7), column descriptions as a document or in the metadata (8), methodology notes (5), time coverage stated (3), contact email (2).</td></tr>
-          <tr><td>Portal checks</td><td class="num">15</td><td>Share of the portal's own file checks the publisher marked as met: UTF-8, comma separator, not compressed, standard projection, empty unknown values, ISO dates, '.' decimals, simple booleans. 8 when none were filled in.</td></tr>
-          <tr><td>Licence</td><td class="num">10</td><td>10 when commercial reuse is allowed (CC BY, CC BY-SA, CC0, OGL). 6 for no-derivatives licences. 3 for non-commercial licences.</td></tr>
+          <tr><td>API access</td><td class="num">10</td><td>10 when at least one file can be queried row by row through the portal's API (a CKAN DataStore table or a Socrata dataset). 7 for a web map or feature service. 0 otherwise.</td></tr>
+          <tr><td>Documentation</td><td class="num">25</td><td>Description length (up to 7), column descriptions as a document or in the metadata (8), methodology notes (5), time coverage stated (3), contact email (2). When a portal has no field for methodology or time coverage, those get half points (3 and 2) instead of zero.</td></tr>
+          <tr><td>Portal checks</td><td class="num">15</td><td>Share of the portal's own file checks that were met: Données Québec's publisher checklist (UTF-8, comma separator, not compressed, standard projection, empty unknown values, ISO dates, '.' decimals, simple booleans) and Ontario's automatic file validation. 8 when there are none.</td></tr>
+          <tr><td>Licence</td><td class="num">10</td><td>10 when commercial reuse is allowed (CC BY, CC BY-SA, CC0, the Open Government Licences). 6 for no-derivatives licences. 3 for non-commercial licences and Crown copyright terms. 0 with no open licence.</td></tr>
         </tbody>
       </table>
     </div>
-    <p>Grades: A from 85, B from 70, C from 55, D below 55. Column lists come from the main queryable table of each dataset (the most recently changed data file in the DataStore). Views are the portal's own counters; "lately" means the last 14 days.</p>
+    <p>Grades: A from 85, B from 70, C from 55, D below 55. Column lists come from each dataset's main table: the DataStore for CKAN portals that have one, the catalogue for Socrata and BC, and the feature service for ArcGIS Hub. Views are the portal's own counters; "lately" means the last 14 days on Données Québec, the last month on Nova Scotia and New Brunswick, and the last 90 days on Yukon.</p>
   </div>
 </section>
-<footer class="foot gutter"><div class="inner" id="foot">Data: Données Québec catalogue, licensed under CC BY 4.0 unless a dataset says otherwise. This index is not affiliated with Données Québec or the Gouvernement du Québec.</div></footer>
+<footer class="foot gutter"><div class="inner" id="foot">Data: each portal's public catalogue, used under its open licence (Données Québec under CC BY 4.0, the others under their Open Government Licence) unless a dataset says otherwise. This index is not affiliated with any government.</div></footer>
 
 <div class="scrim" id="scrim" hidden></div>
 <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="dTitle" hidden></aside>
 
 <script>
 (() => {
-  const SITE = "https://www.donneesquebec.ca/recherche";
   const FRESH = {
     on_time: ["On schedule", "good"], recent: ["Changed this year", "good"], late: ["Running late", "warn"],
     stale: ["1–3 years old", "warn"], overdue: ["Overdue", "bad"], old: ["3+ years old", "bad"],
@@ -276,8 +291,8 @@ details.fold summary { cursor: pointer; font-weight: 700; font-size: 14px; }
   const bytes = (b) => !b ? "" : b < 1e3 ? b + " B" : b < 1e6 ? (b / 1e3).toFixed(0) + " KB" : b < 1e9 ? (b / 1e6).toFixed(1) + " MB" : (b / 1e9).toFixed(2) + " GB";
   const ago = (days) => days == null ? "" : days === 0 ? "today" : days === 1 ? "yesterday" : days < 60 ? days + " days ago" : days < 730 ? Math.round(days / 30.4) + " months ago" : (days / 365).toFixed(1) + " years ago";
 
-  let D = [], FREQ = {}, state;
-  const blank = () => ({ q: "", pub: "", theme: "", freq: "", fmt: "", grades: new Set(), fresh: new Set(), api: false, com: false, desc: false, cols: false, geo: false, std: false, sort: "score", shown: PAGE });
+  let D = [], FREQ = {}, PROV = {}, state;
+  const blank = () => ({ q: "", prov: "", pub: "", theme: "", freq: "", fmt: "", grades: new Set(), fresh: new Set(), api: false, com: false, desc: false, cols: false, geo: false, std: false, sort: "score", shown: PAGE });
 
   function pill(st) { const [label, tone] = FRESH[st] || [st, "none"]; return `<span class="pill t-${tone}"><i class="s-${tone}"></i>${esc(label)}</span>`; }
   function gradeBox(d, big) { return `<div class="grade t-${GRADE[d.gr]}" aria-label="Grade ${d.gr}, ${d.sc} out of 100">${d.gr}${big ? "" : `<small>${d.sc}</small>`}</div>`; }
@@ -288,6 +303,8 @@ details.fold summary { cursor: pointer; font-weight: 700; font-size: 14px; }
   function counted(list) { const m = new Map(); list.forEach((v) => m.set(v, (m.get(v) || 0) + 1)); return m; }
 
   function buildFilters() {
+    const provs = counted(D.map((d) => d.pr));
+    options($("fProv"), Object.keys(PROV).map((k) => [k, PROV[k][0], provs.get(k)]), "All portals");
     const pubs = counted(D.map((d) => d.o));
     options($("fPub"), [...pubs].sort((a, b) => a[0].localeCompare(b[0], "fr")).map(([k, c]) => [k, k, c]), "All publishers");
     const themes = counted(D.flatMap((d) => d.g));
@@ -317,6 +334,27 @@ details.fold summary { cursor: pointer; font-weight: 700; font-size: 14px; }
     const g = counted(D.map((d) => d.gr)), f = counted(D.map((d) => d.st));
     distBar("gradeBar", "gradeLegend", ["A", "B", "C", "D"], (k) => "Grade " + k, (k) => GRADE[k], (k) => g.get(k) || 0, "grade");
     distBar("freshBar", "freshLegend", Object.keys(FRESH), (k) => FRESH[k][0], (k) => FRESH[k][1], (k) => f.get(k) || 0, "fresh");
+    compare();
+  }
+
+  function mini(ds, keys, key, toneOf, labelOf) {
+    const c = counted(ds.map(key)), parts = keys.filter((k) => c.get(k));
+    return `<div class="mini" role="img" aria-label="${esc(parts.map((k) => `${labelOf(k)} ${c.get(k)}`).join(", "))}">` +
+      parts.map((k) => `<span class="s-${toneOf(k)}" style="flex:${c.get(k)} 1 0" title="${esc(labelOf(k))}: ${n(c.get(k))}"></span>`).join("") + `</div>`;
+  }
+
+  function compare() {
+    const rows = Object.entries(PROV).map(([code, [name, site]]) => {
+      const ds = D.filter((d) => d.pr === code), sc = ds.map((d) => d.sc).sort((a, b) => a - b);
+      return { code, name, site, ds, med: (sc[(sc.length - 1) >> 1] + sc[sc.length >> 1]) / 2 };
+    }).sort((a, b) => b.med - a.med || b.ds.length - a.ds.length);
+    $("compare").innerHTML = rows.map((r) => `<tr>
+        <td><button type="button" class="linkish" data-prov="${esc(r.code)}">${esc(r.name)}</button><br><span class="site">${esc(r.site)}</span></td>
+        <td class="num">${n(r.ds.length)}</td><td class="num">${r.med}</td>
+        <td>${mini(r.ds, ["A", "B", "C", "D"], (d) => d.gr, (k) => GRADE[k], (k) => "Grade " + k)}</td>
+        <td>${mini(r.ds, Object.keys(FRESH), (d) => d.st, (k) => FRESH[k][1], (k) => FRESH[k][0])}</td>
+        <td class="num">${Math.round((100 * r.ds.filter((d) => d.cols).length) / r.ds.length)}%</td></tr>`).join("") +
+      `<tr><td>Nunavut<br><span class="site">no open data portal</span></td><td class="num">–</td><td class="num">–</td><td></td><td></td><td class="num">–</td></tr>`;
   }
 
   function hasDesc(d) { return d.fd === "Separate document" || d.fd === "In the description"; }
@@ -324,7 +362,7 @@ details.fold summary { cursor: pointer; font-weight: 700; font-size: 14px; }
   function filtered() {
     const words = fold(state.q).split(/\s+/).filter(Boolean);
     let out = D.filter((d) =>
-      (!state.pub || d.o === state.pub) && (!state.theme || d.g.includes(state.theme)) &&
+      (!state.prov || d.pr === state.prov) && (!state.pub || d.o === state.pub) && (!state.theme || d.g.includes(state.theme)) &&
       (!state.freq || d.fq === state.freq) && (!state.fmt || d.fm.includes(state.fmt)) &&
       (!state.grades.size || state.grades.has(d.gr)) && (!state.fresh.size || state.fresh.has(d.st)) &&
       (!state.api || d.api) && (!state.com || d.com) && (!state.desc || hasDesc(d)) && (!state.cols || d.cols) &&
@@ -345,7 +383,7 @@ details.fold summary { cursor: pointer; font-weight: 700; font-size: 14px; }
       ${gradeBox(d)}
       <div style="min-width:0">
         <h3><button type="button" data-i="${i}">${esc(d.t)}</button></h3>
-        <div class="pub">${esc(d.o)}${d.g.length ? " · " + esc(d.g[0]) : ""}</div>
+        <div class="pub">${esc(PROV[d.pr][0])} · ${esc(d.o)}${d.g.length ? " · " + esc(d.g[0]) : ""}</div>
         <div class="snip">${esc(d.d.replace(/\s+/g, " ").slice(0, 260))}</div>
       </div>
       <div class="meta">
@@ -383,21 +421,53 @@ details.fold summary { cursor: pointer; font-weight: 700; font-size: 14px; }
   function colTable(d) {
     const c = d.cols;
     if (!c) return "";
-    const api = `${SITE}/api/3/action/datastore_search?resource_id=${encodeURIComponent(c.rid)}&limit=5`;
+    const api = safeUrl(c.api);
     return `<div class="dsec"><h3>Columns of the main table</h3>
-      <p style="margin:0 0 8px;font-size:14px">${esc(c.file)} · <span class="mono">${c.rows == null ? "?" : n(c.rows)}</span> rows · <span class="mono">${n(c.c.length)}</span> columns · <a href="${esc(api)}" target="_blank" rel="noopener">First 5 rows as JSON</a></p>
+      <p style="margin:0 0 8px;font-size:14px">${esc(c.file)} · <span class="mono">${c.rows == null ? "?" : n(c.rows)}</span> rows · <span class="mono">${n(c.c.length)}</span> columns${api ? ` · <a href="${esc(api)}" target="_blank" rel="noopener">First 5 rows as JSON</a>` : ""}</p>
       <div class="tablewrap"><table><thead><tr><th>Column</th><th>Type</th><th>Description</th></tr></thead><tbody>` +
       c.c.map(([id, type, label, notes]) => `<tr><td class="mono">${esc(id)}</td><td class="mono">${esc(type)}</td><td>${esc([label, notes].filter(Boolean).join(" — "))}</td></tr>`).join("") +
       `</tbody></table></div></div>`;
   }
 
+  // full records come in one file per province, fetched the first time a dataset from it is opened
+  const details = {};
+  function detail(pr) {
+    return details[pr] ||= fetch(`detail/${pr}.json`).then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .catch((err) => { delete details[pr]; throw err; });
+  }
+
+  function drawerHead(d) {
+    return `<div class="dhead">
+        ${gradeBox(d)}
+        <div style="min-width:0"><h2 id="dTitle">${esc(d.t)}</h2><div class="pub">${esc(d.o)}${d.po && d.po !== d.o ? " · " + esc(d.po) : ""}</div></div>
+        <button class="close" id="close" type="button" aria-label="Close">✕</button>
+      </div>`;
+  }
+
+  function showDrawer(html) {
+    $("drawer").innerHTML = html;
+    $("scrim").hidden = false;
+    $("drawer").hidden = false;
+    $("drawer").scrollTop = 0;
+    document.body.style.overflow = "hidden";
+    $("close").focus();
+  }
+
   function openDrawer(i) {
-    const d = D[i];
-    const page = `${SITE}/dataset/${encodeURIComponent(d.s)}`;
-    const api = `${SITE}/api/3/action/package_show?id=${encodeURIComponent(d.s)}`;
+    lastOpened = i;
+    showDrawer(drawerHead(D[i]) + `<p class="dsec">Loading details…</p>`);
+    const still = () => lastOpened === i && !$("drawer").hidden;
+    detail(D[i].pr).then(
+      (det) => { if (still()) { const d = { ...D[i], ...det[D[i].s] }; showDrawer(drawerHead(d) + drawerBody(d)); } },
+      (err) => { if (still()) showDrawer(drawerHead(D[i]) + `<p class="dsec">The details could not be loaded (${esc(err.message)}). Close and open the dataset again to retry.</p>`); });
+  }
+
+  function drawerBody(d) {
+    const page = safeUrl(d.u);
+    const api = safeUrl(d.mu);
     const web = safeUrl(d.web);
     const plus = [];
-    if (d.std) plus.push(`Follows the Québec data standard “${d.std}”`);
+    if (d.std) plus.push(`Follows the data standard “${d.std}”`);
     if (d.ref) plus.push("Marked as reference data (données de référence)");
     if (d.api) plus.push("At least one file can be queried row by row through the API");
     if (d.st === "on_time") plus.push(`Updated on schedule (${(FREQ[d.fq] || "").toLowerCase()})`);
@@ -407,19 +477,15 @@ details.fold summary { cursor: pointer; font-weight: 700; font-size: 14px; }
     }).join("");
     const checks = d.chk.length ? `<div class="dsec"><h3>Portal file checks (publisher's own answers)</h3><div class="tablewrap"><table><thead><tr><th>Check</th><th>Files meeting it</th><th>Files not meeting it</th></tr></thead><tbody>` +
       d.chk.map(([label, y, no]) => `<tr><td>${esc(label)}</td><td class="num">${y ? `<span class="tick">✓</span> ${y}` : "–"}</td><td class="num">${no ? `<span class="cross">✗</span> ${no}` : "–"}</td></tr>`).join("") + `</tbody></table></div></div>` : "";
-    $("drawer").innerHTML = `
-      <div class="dhead">
-        ${gradeBox(d)}
-        <div style="min-width:0"><h2 id="dTitle">${esc(d.t)}</h2><div class="pub">${esc(d.o)}${d.po && d.po !== d.o ? " · " + esc(d.po) : ""}</div></div>
-        <button class="close" id="close" type="button" aria-label="Close">✕</button>
-      </div>
-      <div class="links"><a href="${esc(page)}" target="_blank" rel="noopener">Open on donneesquebec.ca ↗</a><a href="${esc(api)}" target="_blank" rel="noopener">Full metadata (JSON) ↗</a>${web ? `<a href="${esc(web)}" target="_blank" rel="noopener">Publisher's page ↗</a>` : ""}</div>
+    return `
+      <div class="links">${page ? `<a href="${esc(page)}" target="_blank" rel="noopener">Open on ${esc(new URL(page).hostname)} ↗</a>` : ""}${api ? `<a href="${esc(api)}" target="_blank" rel="noopener">Full metadata (JSON) ↗</a>` : ""}${web ? `<a href="${esc(web)}" target="_blank" rel="noopener">Publisher's page ↗</a>` : ""}</div>
       <div class="dsec card scorecard">
         <div class="bigscore">${gradeBox(d, true)}<span class="num">${d.sc} / 100</span></div>
         <div class="subs">${subs}</div>
       </div>
       ${d.fl.length || plus.length ? `<div class="dsec"><h3>What to watch</h3><ul class="flags">${plus.map((t) => `<li class="plus">${esc(t)}</li>`).join("")}${d.fl.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>` : ""}
       <div class="dsec"><h3>At a glance</h3><dl class="facts">
+        <dt>Portal</dt><dd>${esc(PROV[d.pr][0])} · ${esc(PROV[d.pr][1])}</dd>
         <dt>Promised updates</dt><dd>${esc(FREQ[d.fq] || d.fq)}</dd>
         <dt>Last data change</dt><dd>${pill(d.st)} <span class="mono">${esc(d.lu || "unknown")}</span> ${d.age != null ? `(${esc(ago(d.age))})` : ""}${d.lus === "file added" && d.lu ? `<br><span style="color:var(--muted);font-size:13px">No change dates on the files, so this is the date the newest file was added.</span>` : ""}</dd>
         <dt>On the portal since</dt><dd class="mono">${esc(d.cr)}</dd>
@@ -438,12 +504,6 @@ details.fold summary { cursor: pointer; font-weight: 700; font-size: 14px; }
       ${colTable(d)}
       ${checks}
       <div class="dsec"><h3>Files (${n(d.files.length)})</h3>${fileTable(d)}</div>`;
-    $("scrim").hidden = false;
-    $("drawer").hidden = false;
-    $("drawer").scrollTop = 0;
-    document.body.style.overflow = "hidden";
-    $("close").focus();
-    lastOpened = i;
   }
   let lastOpened = null;
   function closeDrawer() {
@@ -458,12 +518,13 @@ details.fold summary { cursor: pointer; font-weight: 700; font-size: 14px; }
     const on = (id, ev, fn) => $(id).addEventListener(ev, fn);
     let t;
     on("q", "input", () => { clearTimeout(t); t = setTimeout(() => { state.q = $("q").value; state.shown = PAGE; render(); }, 120); });
-    [["fPub", "pub"], ["fTheme", "theme"], ["fFreq", "freq"], ["fFmt", "fmt"], ["sort", "sort"]].forEach(([id, k]) =>
+    [["fProv", "prov"], ["fPub", "pub"], ["fTheme", "theme"], ["fFreq", "freq"], ["fFmt", "fmt"], ["sort", "sort"]].forEach(([id, k]) =>
       on(id, "change", () => { state[k] = $(id).value; state.shown = PAGE; render(); }));
     [["tApi", "api"], ["tCom", "com"], ["tDesc", "desc"], ["tCols", "cols"], ["tGeo", "geo"], ["tStd", "std"]].forEach(([id, k]) =>
       on(id, "change", () => { state[k] = $(id).checked; state.shown = PAGE; render(); }));
     document.addEventListener("click", (e) => {
-      const g = e.target.closest("[data-grade]"), f = e.target.closest("[data-fresh]");
+      const g = e.target.closest("[data-grade]"), f = e.target.closest("[data-fresh]"), p = e.target.closest("[data-prov]");
+      if (p) { state.prov = $("fProv").value = p.dataset.prov; state.shown = PAGE; render(); $("count").scrollIntoView({ behavior: "smooth" }); return; }
       if (g) { const s = state.grades; s.has(g.dataset.grade) ? s.delete(g.dataset.grade) : s.add(g.dataset.grade); state.shown = PAGE; render(); return; }
       if (f) { const s = state.fresh; s.has(f.dataset.fresh) ? s.delete(f.dataset.fresh) : s.add(f.dataset.fresh); state.shown = PAGE; render(); return; }
       const r = e.target.closest(".row");
@@ -475,7 +536,7 @@ details.fold summary { cursor: pointer; font-weight: 700; font-size: 14px; }
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("drawer").hidden) closeDrawer(); });
     on("reset", "click", () => {
       state = blank();
-      $("q").value = ""; ["fPub", "fTheme", "fFreq", "fFmt"].forEach((id) => ($(id).value = "")); $("sort").value = "score";
+      $("q").value = ""; ["fProv", "fPub", "fTheme", "fFreq", "fFmt"].forEach((id) => ($(id).value = "")); $("sort").value = "score";
       ["tApi", "tCom", "tDesc", "tCols", "tGeo", "tStd"].forEach((id) => ($(id).checked = false));
       render();
     });
@@ -483,10 +544,12 @@ details.fold summary { cursor: pointer; font-weight: 700; font-size: 14px; }
 
   state = blank();
   if (window.matchMedia("(max-width: 900px)").matches) $("filterBox").open = false;
-  fetch("data.json").then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).then((data) => {
+  fetch("index.json").then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).then((data) => {
     FREQ = data.freq;
+    PROV = data.provinces;
     D = data.datasets;
-    D.forEach((d, i) => { d._i = i; d._hay =fold([d.t, d.o, d.po, d.g.join(" "), d.tg.join(" "), d.d, d.s, d.cols ? d.cols.c.map((c) => c[0] + " " + c[2]).join(" ") : ""].join(" ")); });
+    // k: parent organisation, keywords and column names, sent for search only
+    D.forEach((d, i) => { d._i = i; d._hay = fold([d.t, d.o, PROV[d.pr][0], d.g.join(" "), d.d, d.s, d.k].join(" ")); delete d.k; });
     header(data.summary);
     buildFilters();
     bind();
