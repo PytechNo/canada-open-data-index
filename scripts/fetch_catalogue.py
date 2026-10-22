@@ -1,12 +1,20 @@
-"""Download the full Données Québec CKAN catalogue (every dataset with its resources)."""
+"""Download a portal's full CKAN catalogue (every dataset with its resources) to <out_dir>/packages.json.gz.
+
+usage: fetch_catalogue.py <province code> <out_dir>
+"""
+import gzip
 import json
+import os
 import sys
 import time
 import urllib.request
 
-API = "https://www.donneesquebec.ca/recherche/api/3/action/package_search"
+from portals import PORTALS
+
+code, out_dir = sys.argv[1], sys.argv[2]
+API = PORTALS[code]["api"] + "/package_search"
 ROWS = 500
-out_path = sys.argv[1]
+out_path = os.path.join(out_dir, "packages.json.gz")
 
 
 def get(url):
@@ -27,6 +35,7 @@ while True:
         break
     time.sleep(3)
 
-with open(out_path, "w", encoding="utf-8") as f:
+os.makedirs(out_dir, exist_ok=True)
+with gzip.open(out_path, "wt", encoding="utf-8") as f:
     json.dump(packages, f, ensure_ascii=False)
 print("saved", len(packages), "datasets to", out_path)

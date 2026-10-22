@@ -82,10 +82,10 @@ Everything uses Python 3 with the standard library only.
 | Step | Script | Output |
 |---|---|---|
 | 1. Crawl the WordPress sitemaps | [`scripts/crawl_sitemaps.py`](scripts/crawl_sitemaps.py) | `sitemaps/sitemap_urls.csv` |
-| 2. Download the full catalogue (4 calls to `package_search`, 500 datasets each) | [`scripts/fetch_catalogue.py`](scripts/fetch_catalogue.py) | `raw/packages.json` |
-| 3. Download the portal's field definitions | `curl` of `scheming_dataset_schema_show` | `raw/schema.json` |
-| 4. Fetch the column list and row count of each dataset's main table (one `datastore_search?limit=0` call per dataset, 1.2 s apart) | [`scripts/fetch_columns.py`](scripts/fetch_columns.py) | `raw/columns.jsonl` |
-| 5. Score every dataset and write the CSVs and page data | [`scripts/build_index.py`](scripts/build_index.py) | `data/*.csv`, `site/data.json` |
+| 2. Download the full catalogue (4 calls to `package_search`, 500 datasets each) | [`scripts/fetch_catalogue.py`](scripts/fetch_catalogue.py) | `raw/QC/packages.json.gz` |
+| 3. Download the portal's field definitions | `curl` of `scheming_dataset_schema_show` | `raw/QC/schema.json` |
+| 4. Fetch the column list and row count of each dataset's main table (one `datastore_search?limit=0` call per dataset, 1.2 s apart) | [`scripts/fetch_columns.py`](scripts/fetch_columns.py) | `raw/QC/columns.jsonl` |
+| 5. Turn each portal's catalogue into common records, score every dataset and write the CSVs and page data | [`scripts/normalize.py`](scripts/normalize.py), [`scripts/build_index.py`](scripts/build_index.py) | `data/*.csv`, `site/data.json` |
 | 6. Package the page for static hosting | [`scripts/make_site.py`](scripts/make_site.py) | `docs/index.html`, `docs/data.json` |
 
 [`run_all.sh`](run_all.sh) runs all six steps for a fresh snapshot (about an hour, mostly the polite column fetch):

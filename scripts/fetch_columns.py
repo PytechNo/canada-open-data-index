@@ -3,6 +3,7 @@
 Picks the most recently modified DataStore resource of type "donnees" (falls back to any
 DataStore resource). Appends one JSON line per dataset, so a rerun resumes where it stopped.
 """
+import gzip
 import json
 import os
 import sys
@@ -28,7 +29,7 @@ if os.path.exists(out_path):
     with open(out_path, encoding="utf-8") as f:
         done = {json.loads(line)["dataset_id"] for line in f if line.strip()}
 
-packages = json.load(open(packages_path, encoding="utf-8"))
+packages = json.load(gzip.open(packages_path, "rt", encoding="utf-8"))
 todo = [(p, main_resource(p)) for p in packages if p["id"] not in done]
 todo = [(p, r) for p, r in todo if r]
 print(f"{len(done)} already done, {len(todo)} to fetch", flush=True)
