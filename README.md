@@ -126,7 +126,7 @@ Everything uses Python 3 with the standard library only. The portals are listed 
 | 5. Turn each portal's catalogue into common records, score every dataset and write the CSVs and page data | [`scripts/normalize.py`](scripts/normalize.py), [`scripts/build_index.py`](scripts/build_index.py) | `data/*.csv`, `site/index.json` (one slim row per dataset, loaded at start), `site/detail/<code>.json` (full records, loaded when a dataset from that portal is opened) |
 | 6. Package the page for static hosting | [`scripts/make_site.py`](scripts/make_site.py) | `docs/index.html`, `docs/index.json`, `docs/detail/` |
 
-[`run_all.sh`](run_all.sh) runs all six steps for a fresh snapshot (about an hour and a half, mostly the polite column fetch):
+[`run_all.sh`](run_all.sh) runs all six steps for a fresh snapshot (2 to 3 hours, mostly the polite column fetch; the federal DataStore alone takes 25 to 75 minutes depending on how busy it is):
 
 ```bash
 ./run_all.sh 2026-11-01

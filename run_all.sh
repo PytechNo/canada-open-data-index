@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Rebuild everything from scratch: sitemap list, catalogue snapshot, column lists, index, site.
-# Needs Python 3.9+ and no extra packages. Takes about an hour and a half, mostly the polite column fetch.
+# Needs Python 3.9+ and no extra packages. Takes 2 to 3 hours, mostly the polite column fetch (the federal DataStore alone is 25-75 min).
 # A download that fails keeps its last copy in raw/ (or sitemaps/); the run carries on and lists it at the end.
 set -euo pipefail
 cd "$(dirname "$0")"
