@@ -94,6 +94,8 @@ Everything uses Python 3 with the standard library only.
 ./run_all.sh 2026-11-01
 ```
 
+If a portal is down, its download is skipped and the build reuses its last snapshot in `raw/`. The run ends with a warning listing what was skipped.
+
 The repository itself was created and pushed with the GitHub CLI by [`publish.sh`](publish.sh).
 
 ## Data licence
