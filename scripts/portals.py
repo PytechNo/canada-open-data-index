@@ -37,4 +37,8 @@ PORTALS = {
     "PE": {"name": "Prince Edward Island", "platform": "hub",
            "api": "https://data.princeedwardisland.ca/api/search/v1/collections/dataset/items",
            "page": "https://data.princeedwardisland.ca/datasets/{id}"},
+    # federal departments only: "primary" is the core open data collection; the portal's provincial copies,
+    # publications, parliamentary reports and the geospatial collections (geogratis, fgp) stay out
+    "CA": {"name": "Federal", "platform": "ckan", "api": "https://open.canada.ca/data/api/3/action",
+           "page": "https://open.canada.ca/data/en/dataset/{id}", "fq": "jurisdiction:federal AND collection:primary"},
 }

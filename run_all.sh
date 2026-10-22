@@ -8,7 +8,7 @@ SNAPSHOT="${1:-$(date +%F)}"
 failed=""
 
 python scripts/crawl_sitemaps.py sitemaps/sitemap_urls.csv || failed="$failed sitemaps"
-for code in QC ON BC AB YT NT NL NS NB MB SK PE; do
+for code in QC ON BC AB YT NT NL NS NB MB SK PE CA; do
   python scripts/fetch_catalogue.py "$code" "raw/$code" || failed="$failed $code"
 done
 # the Quebec extras download to .new first, so a failure never replaces the last good copy
@@ -27,8 +27,9 @@ if [[ " $failed " != *" QC "* ]]; then
   fi
 fi
 python scripts/build_index.py raw data "$SNAPSHOT"
-mv data/data.json site/data.json
-python scripts/make_site.py site/page.html site/data.json docs
+rm -rf site/index.json site/detail
+mv data/index.json data/detail site/
+python scripts/make_site.py site/page.html site docs
 if [ -n "$failed" ]; then
   echo "WARNING: these downloads failed and kept their last snapshot:$failed" >&2
 fi

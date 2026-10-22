@@ -14,7 +14,7 @@ Snapshot: **2026-10-22** · **1,614 datasets** · **120 publishers** · **11,763
   - [`data/files.csv`](data/files.csv): one row per file (11,763), with format, last change, size, download link and the portal's file checks
   - [`data/columns.csv`](data/columns.csv): one row per column of each dataset's main table (17,638 rows)
 
-To open the interactive index locally, serve the folder (browsers block `data.json` when the page is opened as a plain file):
+To open the interactive index locally, serve the folder (browsers block the page's data files when it is opened as a plain file):
 
 ```bash
 python -m http.server 8000 --directory docs
@@ -85,8 +85,8 @@ Everything uses Python 3 with the standard library only.
 | 2. Download the full catalogue (4 calls to `package_search`, 500 datasets each) | [`scripts/fetch_catalogue.py`](scripts/fetch_catalogue.py) | `raw/QC/packages.json.gz` |
 | 3. Download the portal's field definitions | `curl` of `scheming_dataset_schema_show` | `raw/QC/schema.json` |
 | 4. Fetch the column list and row count of each dataset's main table (one `datastore_search?limit=0` call per dataset, 1.2 s apart) | [`scripts/fetch_columns.py`](scripts/fetch_columns.py) | `raw/QC/columns.jsonl` |
-| 5. Turn each portal's catalogue into common records, score every dataset and write the CSVs and page data | [`scripts/normalize.py`](scripts/normalize.py), [`scripts/build_index.py`](scripts/build_index.py) | `data/*.csv`, `site/data.json` |
-| 6. Package the page for static hosting | [`scripts/make_site.py`](scripts/make_site.py) | `docs/index.html`, `docs/data.json` |
+| 5. Turn each portal's catalogue into common records, score every dataset and write the CSVs and page data | [`scripts/normalize.py`](scripts/normalize.py), [`scripts/build_index.py`](scripts/build_index.py) | `data/*.csv`, `site/index.json` (one slim row per dataset, loaded at start), `site/detail/<province>.json` (full records, loaded when a dataset from that province is opened) |
+| 6. Package the page for static hosting | [`scripts/make_site.py`](scripts/make_site.py) | `docs/index.html`, `docs/index.json`, `docs/detail/` |
 
 [`run_all.sh`](run_all.sh) runs all six steps for a fresh snapshot (about an hour, mostly the polite column fetch):
 

@@ -121,7 +121,7 @@ Each phase ends with something that runs.
 | 3 | Socrata fetcher and normaliser: NS, NB | 1,032 more; columns come from the catalogue. **Done 2026-10-22:** 1,032 more datasets (10,156 in all); the 9,124 earlier rows are unchanged; decisions in section 11 |
 | 4 | Hub fetcher and normaliser: MB, SK, PE, plus one FeatureServer call per item for fields and last edit date | 342 more. **Done 2026-10-22:** 342 more datasets (10,498 in all); the 10,156 earlier rows are unchanged; decisions in section 12 |
 | 5 | Columns: DataStore for ON and NT through the existing `fetch_columns.py` (it already resumes and waits 1.2 s per call) | column lists for every platform that has them |
-| 6 | Split JSON, province filter, comparison table, README, `run_all.sh` loop | the site serves locally and on Pages |
+| 6 | Split JSON, province filter, comparison table, README, `run_all.sh` loop | the site serves locally and on Pages. **Split done 2026-10-22** (section 13); province filter, comparison table and the Canada-wide README and page header are still to do |
 | 7 | Rename the repo (if chosen) and publish | live link works |
 
 Phase 2 covers 84% of the new datasets with one fetcher, so it goes first after the refactor.
@@ -144,7 +144,7 @@ Phase 2 covers 84% of the new datasets with one fetcher, so it goes first after 
 
 ## 9. Later, not in v1
 
-- **Federal portal** (36,119 federal-only records with `jurisdiction:federal`). It's the biggest single source, and its ISO 8601 frequencies (`P1Y`, `P3M`, `P2W`) convert to days directly. Its size alone (about 160 MB of detail JSON) means it needs the split from section 5 first.
+- ~~**Federal portal**~~ Added 2026-10-22 with the core collection only (13,845 records), see section 13. Still out: its geospatial collections (`geogratis` 9,799, mostly one Natural Resources Canada record per survey site; `fgp` 2,253), publications (8,158) and parliamentary records.
 - **Municipal portals** (Montréal, Toronto, Calgary, Vancouver, Ottawa, …). Same three platforms, so mostly config once v1 exists.
 - **Snapshot history**: keep each run's slim index, to chart freshness over time per province.
 
@@ -224,3 +224,32 @@ Phase 2 covers 84% of the new datasets with one fetcher, so it goes first after 
 - **SK:** a map portal, not a general one: 116 feature services (3 backed by map service layers), 9 shapefiles, 3 file geodatabases, 1 CSV. 60 services run on the province's ArcGIS Server without edit tracking, so 65 records fall back on the item date. 10 items bundle 2 to 92 layers (the geology and petroleum services); each layer is a CSV file in `files.csv` and the columns are the first layer's. 5 services are broken: 2 need a sign-in ("Token Required") and 3 point to layers the service no longer publishes, so they have no data files. The 9 road network layers are each listed twice, as a feature service and as a shapefile; the 8 that promise continual updates were edited 2026-10-18 as services but last revised 2025-05-09 as shapefiles, so each pair is on time once and overdue once.
 - **PE:** 90 feature services, 72 on ArcGIS Online and 18 on the province's server. 24 have no licence (Hub shows "No licence provided"). There's no source field, so the publisher is "Government of Prince Edward Island"; the contact name and email come from the credits text ("Contact Information: … Contact Email: …", 57 and 55 filled). Descriptions are short (median 106 characters, 16 items have only the summary), so 54 get "Very short description". One item states a frequency (daily). 51 of the 64 numbered "OD" tables last changed in March 2024.
 - **All three:** the Hub search API hung on a page twice in about 20 calls and the fetch stopped after its 120 s timeout; running it again worked.
+
+## 13. Site split and federal portal (2026-10-22)
+
+**Split.** `build_index.py` writes `index.json` (one slim row per dataset: what the list, filters, sort and search use) and `detail/<code>.json` (everything the dataset panel shows, keyed by slug). The page fetches a province's detail file the first time one of its datasets is opened, and asks again if that fetch failed.
+
+| File | Size | Gzipped |
+|---|---|---|
+| `index.json` (24,343 datasets) | 19.2 MB | 3.6 MB |
+| `detail/CA.json` (largest) | 31.8 MB | 4.9 MB |
+| `detail/QC.json` | 7.2 MB | 1.4 MB |
+| `files.csv` (largest CSV) | 49.6 MB | |
+
+- The index row keeps a 260-character description (what the list shows) and a search string `k`: parent organisation, keywords, column names and labels. Search therefore no longer covers the rest of a long description.
+- Links come from each record (`u`, and `mu` for the portal's machine-readable record: CKAN `package_show`, Socrata `/api/views/{id}.json`, ArcGIS Online item JSON) instead of being built for donneesquebec.ca. "First 5 rows as JSON" shows only where the columns came from a CKAN DataStore.
+- Checked: on the 10,498 datasets before the federal portal, index plus detail merge back to the previous `data.json` records exactly (apart from the new `mu`, `k` and `cols.api`), and all three CSVs are byte for byte the same.
+
+**Federal portal** (`CA`, open.canada.ca, `jurisdiction:federal AND collection:primary`): 13,845 records, 60 departments, 28 catalogue calls, 17 MB gzipped. The full build takes 16 s and about 700 MB of memory.
+
+| Province | Datasets | A | B | C | D | Median score |
+|---|---|---|---|---|---|---|
+| CA | 13,845 | 65 | 896 | 5,160 | 7,724 | 52 |
+
+- **Field map** `ca()`, which NL now shares: English title and description, the English half of "English \| French" department names, subjects as themes, English keywords as tags (NL's 76 records gain themes and keywords; nothing else in the earlier rows changed), file types `dataset` (data), `guide` / `data_dictionary` / `specification` (documentation), `api` / `web_service` (service).
+- **Frequencies** are ISO 8601 durations plus words. New codes `fourmonthly` (P4M, 2 datasets) and `quadrennial` (P4Y, 1). P0.5M (twice a month, 2 datasets) is read as every 2 weeks.
+- **Licences:** OGL-Canada on all but 2; the Commissioner of Lobbying's Open Data Licence Agreement allows commercial use, so it scores 10.
+- **Bulk-load dates.** Federal files have no change date (StatCan: 2 of 10,010 records have one), only a creation date, and StatCan re-creates a table's files when it releases it. But the catalogue was also reloaded in bulk: 3,738 records were created on 2023-01-17 (437 of their titles end in "inactive"), 1,413 on 2016-12-01 (the migration), 326 on 2023-11-08. A creation date shared by 300+ records is treated as no date, so those 5,451 records are "No dates" (10 of 25 freshness points) instead of "overdue" on a load date. The next largest group is 135 records (2025-05-26), treated as a real release day. 2023-11-08 is the least certain, but 93% of those records promise "as needed" updates, where a 3-year-old date and no date both score 10. StatCan's own site and API were down on 2026-10-22, so release dates couldn't be checked against it.
+- **Findings:** Statistics Canada is 10,010 of the 13,845 (median 52; the other departments 55). Average points: freshness 11.3/25, format 14.3/15, API 1.0/10 (only a few files are in the DataStore), documentation 10.2/25, portal checks 8/15 (none, so neutral), licence 10/10. 13,209 have no column descriptions in the catalogue, 2,387 very short descriptions, 1,259 no frequency.
+- Checked: 5 random federal records match the live `package_show` on title, frequency, file count and newest file date (the one on a bulk date shows "No dates").
+- Not done: column lists (`fetch_columns.py` still only knows the Quebec DataStore), and the published `data/` and `docs/` aren't regenerated.

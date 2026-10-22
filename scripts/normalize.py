@@ -19,8 +19,9 @@ from portals import PORTALS
 FREQ = {  # code: (English label, expected days between updates or None)
     "continuous": ("Real time", 1), "hourly": ("Hourly", 1), "daily": ("Daily", 1),
     "weekly": ("Weekly", 7), "biweekly": ("Every 2 weeks", 14), "monthly": ("Monthly", 31),
-    "bimonthly": ("Every 2 months", 61), "quarterly": ("Quarterly", 92), "semiannual": ("Twice a year", 183),
-    "annual": ("Yearly", 366), "biennial": ("Every 2 years", 731), "triennial": ("Every 3 years", 1096),
+    "bimonthly": ("Every 2 months", 61), "quarterly": ("Quarterly", 92), "fourmonthly": ("Every 4 months", 122),
+    "semiannual": ("Twice a year", 183), "annual": ("Yearly", 366), "biennial": ("Every 2 years", 731),
+    "triennial": ("Every 3 years", 1096), "quadrennial": ("Every 4 years", 1461),
     "quinquennial": ("Every 5 years", 1827), "asNeeded": ("As needed", None),
     "irregular": ("Irregular", None), "notPlanned": ("No updates planned", None),
     "archives": ("Archive", None), "notStated": ("Not stated", None),
@@ -44,6 +45,13 @@ FREQ_MAPS = {  # portal value -> FREQ code
     "NT": {"monthly": "monthly", "quarterly": "quarterly", "yearly": "annual", "every5years": "quinquennial",
            "as_needed": "asNeeded", "infrequently": "irregular", "never": "notPlanned"},
     "NL": {"unknown": "notStated"},
+    # ISO 8601 durations, plus words for the unscheduled ones
+    # shortcut: P0.5M (twice a month) read as every 2 weeks, the nearest code; 2 datasets use it
+    "CA": {"P1D": "daily", "P1W": "weekly", "P2W": "biweekly", "P0.5M": "biweekly", "P1M": "monthly",
+           "P2M": "bimonthly", "P3M": "quarterly", "P4M": "fourmonthly", "P6M": "semiannual", "P1Y": "annual",
+           "P2Y": "biennial", "P3Y": "triennial", "P4Y": "quadrennial", "P5Y": "quinquennial",
+           "continual": "continuous", "as_needed": "asNeeded", "irregular": "irregular",
+           "not_planned": "notPlanned", "unknown": "notStated", "": "notStated"},
     # shortcut: "Bi-Annually" read as twice a year, like Ontario's "biannually"; NS doesn't define it
     "NS": {"Daily": "daily", "Monthly": "monthly", "Bi-Monthly": "bimonthly", "Quarterly": "quarterly",
            "Bi-Annually": "semiannual", "Annually": "annual", "As needed": "asNeeded", "One-time": "notPlanned",
@@ -248,17 +256,45 @@ def nt(p, rec, res, raw_dir):
     )
 
 
-def nl(p, rec, res, raw_dir):
+def ca(p, rec, res, raw_dir, code="CA"):
+    """open.canada.ca: bilingual fields, "English | French" organisation names, subjects and keywords
+    instead of groups and tags."""
     rec.update(
         title=en(p.get("title_translated")) or p["title"], description=en(p.get("notes_translated")) or p.get("notes"),
         publisher=rec["publisher"].split(" | ")[0], parent=rec["publisher"].split(" | ")[0],
-        frequency=freq("NL", p.get("frequency")),
+        themes=[s.replace("_", " ").capitalize() for s in p.get("subject") or []],
+        tags=(p.get("keywords") or {}).get("en") or rec["tags"],
+        frequency=freq(code, p.get("frequency")),
         time_coverage=span(p.get("time_period_coverage_start"), p.get("time_period_coverage_end")),
     )
-    # the federal copy's file and "modified" dates are its own sync dates, so fall back on first publication
     for f, r in zip(rec["files"], res):
-        f.update(type=r.get("resource_type") or "", data=r.get("resource_type") == "dataset",
-                 doc=r.get("resource_type") == "guide", added=p.get("date_published"))
+        kind = r.get("resource_type") or ""
+        f.update(type=kind, data=kind == "dataset", dictionary=kind == "data_dictionary",
+                 doc=kind in ("guide", "data_dictionary", "specification"), service=kind in ("api", "web_service"))
+
+
+def drop_bulk_dates(out):
+    """Federal files have no change date, only a creation date, and the catalogue was reloaded in bulk:
+    3,738 records were created on 2023-01-17, 1,413 on 2016-12-01 (the migration), 326 on 2023-11-08.
+    A creation date shared by that many records says when the catalogue was loaded, not when the data
+    changed, so those records get no date ("No dates") instead of a freshness score built on it."""
+    # shortcut: 300 sits between the third bulk load (326) and the biggest single release day (135, 2025-05-26);
+    # 2023-11-08 is the least certain (mixed StatCan tables), but 93% promise "as needed", where a 3-year-old
+    # date and no date both score 10. Recheck the threshold if a new reload lands
+    newest = Counter(max((f["added"] or "")[:10] for f in r["files"]) for r in out if r["files"])
+    bulk = {d for d, n in newest.items() if n >= 300}
+    for r in out:
+        if r["files"] and not any(f["modified"] for f in r["files"]) and \
+                max((f["added"] or "")[:10] for f in r["files"]) in bulk:
+            for f in r["files"]:
+                f["added"] = None
+
+
+def nl(p, rec, res, raw_dir):
+    ca(p, rec, res, raw_dir, "NL")
+    # the federal copy's file and "modified" dates are its own sync dates, so fall back on first publication
+    for f in rec["files"]:
+        f["added"] = p.get("date_published")
 
 
 # Socrata maps get the portal's custom metadata fields (domain_metadata) as a dict instead of resources.
@@ -323,7 +359,7 @@ def pe(p, rec, meta, raw_dir):
 
 
 FIELD_MAPS = {"QC": qc, "ON": on, "BC": bc, "AB": ab, "YT": yt, "NT": nt, "NL": nl, "NS": ns, "NB": nb,
-              "MB": mb, "SK": sk, "PE": pe}
+              "MB": mb, "SK": sk, "PE": pe, "CA": ca}
 
 
 def ckan(code, raw_dir):
@@ -359,6 +395,8 @@ def ckan(code, raw_dir):
         FIELD_MAPS[code](p, rec, res, raw_dir)
         fix_links(files)
         out.append(rec)
+    if code == "CA":
+        drop_bulk_dates(out)
     return out
 
 

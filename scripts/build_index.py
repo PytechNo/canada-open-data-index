@@ -1,5 +1,9 @@
 """Build the dataset index (page data + CSV exports) from every portal's downloaded catalogue.
 
+The page data is split so the first load stays small: index.json has one slim row per dataset (what the
+list, filters and search use), and detail/<province>.json has the rest, keyed by dataset slug, fetched the
+first time a dataset from that province is opened.
+
 usage: build_index.py <raw_root> <out_dir> <snapshot YYYY-MM-DD>
 """
 import csv
@@ -12,6 +16,7 @@ from collections import Counter
 from datetime import date, datetime
 
 from normalize import FREQ, records
+from portals import PORTALS
 
 raw_root, out_dir, snapshot = sys.argv[1], sys.argv[2], sys.argv[3]
 TODAY = date.fromisoformat(snapshot)
@@ -41,6 +46,7 @@ LICENCES = {
     "open data licence office of the registrar of lobbyists for british columbia": 10,
     "open licence university of northern british columbia": 10,
     "open data commons public domain dedication and licence": 10, "apache license 2 0": 10, "other open": 10,
+    "open data licence agreement office of the commissioner of lobbying": 10,
     # Crown copyright terms: reproduction for non-commercial purposes without asking
     "king s printer for ontario": 3, "ontario ca terms of use": 3,
     # shortcut: BC King's Printer and the old Ontario terms of use aren't checked against their full text
@@ -110,6 +116,16 @@ def licence_info(lid, title):
         UNKNOWN_LICENCES.add(title or lid)
     pts = LICENCES.get(key, 0)
     return pts >= 6, pts
+
+
+def meta_url(p):
+    """The portal's own machine-readable record for the dataset."""
+    portal = PORTALS[p["province"]]
+    if portal["platform"] == "ckan":
+        return f"{portal['api']}/package_show?id={p['id']}"
+    if portal["platform"] == "socrata":
+        return p["url"].replace("/d/", "/api/views/") + ".json"
+    return f"https://www.arcgis.com/sharing/rest/content/items/{p['id']}?f=json"
 
 
 recs = records(raw_root)
@@ -250,8 +266,12 @@ for p in recs:
 
     cols = None
     if fields_rec.get("fields") is not None:
+        portal = PORTALS[p["province"]]
+        # a row count means the columns came from the DataStore, so the table can be sampled there
+        sample = (f"{portal['api']}/datastore_search?resource_id={fields_rec['resource_id']}&limit=5"
+                  if portal["platform"] == "ckan" and fields_rec.get("total") is not None else "")
         cols = {"rows": fields_rec.get("total"), "file": clean_text(fields_rec.get("resource_name"), 160),
-                "rid": fields_rec["resource_id"],
+                "rid": fields_rec["resource_id"], "api": sample,
                 "c": [[c["id"], c.get("type") or "", clean_text(c.get("label") or "", 120),
                        clean_text(c.get("notes") or "", 300)] for c in fields_rec["fields"]]}
         for c in cols["c"]:
@@ -260,7 +280,7 @@ for p in recs:
                                 "label": c[2], "notes": c[3]})
 
     datasets.append({
-        "pr": p["province"], "s": p["slug"], "u": p["url"], "t": p["title"].strip(), "o": p["publisher"],
+        "pr": p["province"], "s": p["slug"], "u": p["url"], "mu": meta_url(p), "t": p["title"].strip(), "o": p["publisher"],
         "po": p["parent"], "g": p["themes"], "tg": p["tags"][:15],
         "d": clean_text(p["description"], 1500), "m": clean_text(p["methodology"], 900),
         "fq": p["frequency"], "lu": last.isoformat() if last else "", "lus": last_src,
@@ -285,9 +305,30 @@ summary = {
     "with_columns": sum(1 for d in datasets if d["cols"]),
     "grades": Counter(d["gr"] for d in datasets), "status": Counter(d["st"] for d in datasets),
 }
-with open(os.path.join(out_dir, "data.json"), "w", encoding="utf-8") as f:
-    json.dump({"summary": summary, "freq": {k: v[0] for k, v in FREQ.items()}, "datasets": datasets},
-              f, ensure_ascii=False, separators=(",", ":"))
+
+
+def write_json(name, obj):
+    with open(os.path.join(out_dir, name), "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, separators=(",", ":"))
+
+
+# list, filters and sort read these as they are; "d" (snippet), "cols" (column count) and "k" (search words)
+# are slim versions, and the full description and column list are in the detail file
+INDEX_KEYS = ["pr", "s", "t", "o", "g", "fq", "lu", "st", "cr", "sc", "gr", "api", "com", "fd", "geo", "std",
+              "v", "vr", "fm"]
+index, details = [], {}
+for d in datasets:
+    cols = (d["cols"] or {}).get("c", [])
+    index.append({**{k: d[k] for k in INDEX_KEYS}, "d": " ".join(d["d"].split())[:260], "cols": len(cols),
+                  "k": " ".join([d["po"], *d["tg"], *(c[0] + " " + c[2] for c in cols)])})
+    prov = details.setdefault(d["pr"], {})
+    if d["s"] in prov:
+        raise SystemExit(f"Duplicate dataset slug in {d['pr']}: {d['s']}")
+    prov[d["s"]] = {k: v for k, v in d.items() if k not in INDEX_KEYS}
+write_json("index.json", {"summary": summary, "freq": {k: v[0] for k, v in FREQ.items()}, "datasets": index})
+os.makedirs(os.path.join(out_dir, "detail"), exist_ok=True)
+for code, prov in details.items():
+    write_json(os.path.join("detail", f"{code}.json"), prov)
 
 STATUS_EN = {"on_time": "On schedule", "late": "Running late", "overdue": "Overdue", "recent": "Changed in last year",
              "stale": "No change in 1-3 years", "old": "No change in 3+ years", "archive": "Archive", "unknown": "Unknown"}
@@ -326,5 +367,6 @@ if column_rows:
     write_csv("columns.csv", column_rows, list(column_rows[0].keys()))
 
 print(json.dumps(summary, ensure_ascii=False))
-print("data.json bytes:", os.path.getsize(os.path.join(out_dir, "data.json")))
+print("index.json bytes:", os.path.getsize(os.path.join(out_dir, "index.json")), "| detail bytes:",
+      {code: os.path.getsize(os.path.join(out_dir, "detail", f"{code}.json")) for code in details})
 print("rows: datasets", len(ds_rows), "files", len(file_rows), "columns", len(column_rows))

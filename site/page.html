@@ -196,7 +196,7 @@ details.fold summary { cursor: pointer; font-weight: 700; font-size: 14px; }
           <label class="check"><input type="checkbox" id="tDesc"> Column descriptions</label>
           <label class="check"><input type="checkbox" id="tCols"> Column list in this index</label>
           <label class="check"><input type="checkbox" id="tGeo"> Geospatial data</label>
-          <label class="check"><input type="checkbox" id="tStd"> Follows a Québec data standard</label>
+          <label class="check"><input type="checkbox" id="tStd"> Follows a data standard</label>
         </div>
         <button class="reset" id="reset" type="button">Clear all filters</button>
       </details>
@@ -216,7 +216,7 @@ details.fold summary { cursor: pointer; font-weight: 700; font-size: 14px; }
           </select>
         </label>
       </div>
-      <div class="list" id="list"><div class="empty">Loading 1,614 datasets…</div></div>
+      <div class="list" id="list"><div class="empty">Loading the datasets…</div></div>
       <button class="more" id="more" type="button" hidden>Show 50 more</button>
     </section>
   </div>
@@ -249,7 +249,6 @@ details.fold summary { cursor: pointer; font-weight: 700; font-size: 14px; }
 
 <script>
 (() => {
-  const SITE = "https://www.donneesquebec.ca/recherche";
   const FRESH = {
     on_time: ["On schedule", "good"], recent: ["Changed this year", "good"], late: ["Running late", "warn"],
     stale: ["1–3 years old", "warn"], overdue: ["Overdue", "bad"], old: ["3+ years old", "bad"],
@@ -374,21 +373,53 @@ details.fold summary { cursor: pointer; font-weight: 700; font-size: 14px; }
   function colTable(d) {
     const c = d.cols;
     if (!c) return "";
-    const api = `${SITE}/api/3/action/datastore_search?resource_id=${encodeURIComponent(c.rid)}&limit=5`;
+    const api = safeUrl(c.api);
     return `<div class="dsec"><h3>Columns of the main table</h3>
-      <p style="margin:0 0 8px;font-size:14px">${esc(c.file)} · <span class="mono">${c.rows == null ? "?" : n(c.rows)}</span> rows · <span class="mono">${n(c.c.length)}</span> columns · <a href="${esc(api)}" target="_blank" rel="noopener">First 5 rows as JSON</a></p>
+      <p style="margin:0 0 8px;font-size:14px">${esc(c.file)} · <span class="mono">${c.rows == null ? "?" : n(c.rows)}</span> rows · <span class="mono">${n(c.c.length)}</span> columns${api ? ` · <a href="${esc(api)}" target="_blank" rel="noopener">First 5 rows as JSON</a>` : ""}</p>
       <div class="tablewrap"><table><thead><tr><th>Column</th><th>Type</th><th>Description</th></tr></thead><tbody>` +
       c.c.map(([id, type, label, notes]) => `<tr><td class="mono">${esc(id)}</td><td class="mono">${esc(type)}</td><td>${esc([label, notes].filter(Boolean).join(" — "))}</td></tr>`).join("") +
       `</tbody></table></div></div>`;
   }
 
+  // full records come in one file per province, fetched the first time a dataset from it is opened
+  const details = {};
+  function detail(pr) {
+    return details[pr] ||= fetch(`detail/${pr}.json`).then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .catch((err) => { delete details[pr]; throw err; });
+  }
+
+  function drawerHead(d) {
+    return `<div class="dhead">
+        ${gradeBox(d)}
+        <div style="min-width:0"><h2 id="dTitle">${esc(d.t)}</h2><div class="pub">${esc(d.o)}${d.po && d.po !== d.o ? " · " + esc(d.po) : ""}</div></div>
+        <button class="close" id="close" type="button" aria-label="Close">✕</button>
+      </div>`;
+  }
+
+  function showDrawer(html) {
+    $("drawer").innerHTML = html;
+    $("scrim").hidden = false;
+    $("drawer").hidden = false;
+    $("drawer").scrollTop = 0;
+    document.body.style.overflow = "hidden";
+    $("close").focus();
+  }
+
   function openDrawer(i) {
-    const d = D[i];
-    const page = `${SITE}/dataset/${encodeURIComponent(d.s)}`;
-    const api = `${SITE}/api/3/action/package_show?id=${encodeURIComponent(d.s)}`;
+    lastOpened = i;
+    showDrawer(drawerHead(D[i]) + `<p class="dsec">Loading details…</p>`);
+    const still = () => lastOpened === i && !$("drawer").hidden;
+    detail(D[i].pr).then(
+      (det) => { if (still()) { const d = { ...D[i], ...det[D[i].s] }; showDrawer(drawerHead(d) + drawerBody(d)); } },
+      (err) => { if (still()) showDrawer(drawerHead(D[i]) + `<p class="dsec">The details could not be loaded (${esc(err.message)}). Close and open the dataset again to retry.</p>`); });
+  }
+
+  function drawerBody(d) {
+    const page = safeUrl(d.u);
+    const api = safeUrl(d.mu);
     const web = safeUrl(d.web);
     const plus = [];
-    if (d.std) plus.push(`Follows the Québec data standard “${d.std}”`);
+    if (d.std) plus.push(`Follows the data standard “${d.std}”`);
     if (d.ref) plus.push("Marked as reference data (données de référence)");
     if (d.api) plus.push("At least one file can be queried row by row through the API");
     if (d.st === "on_time") plus.push(`Updated on schedule (${(FREQ[d.fq] || "").toLowerCase()})`);
@@ -398,13 +429,8 @@ details.fold summary { cursor: pointer; font-weight: 700; font-size: 14px; }
     }).join("");
     const checks = d.chk.length ? `<div class="dsec"><h3>Portal file checks (publisher's own answers)</h3><div class="tablewrap"><table><thead><tr><th>Check</th><th>Files meeting it</th><th>Files not meeting it</th></tr></thead><tbody>` +
       d.chk.map(([label, y, no]) => `<tr><td>${esc(label)}</td><td class="num">${y ? `<span class="tick">✓</span> ${y}` : "–"}</td><td class="num">${no ? `<span class="cross">✗</span> ${no}` : "–"}</td></tr>`).join("") + `</tbody></table></div></div>` : "";
-    $("drawer").innerHTML = `
-      <div class="dhead">
-        ${gradeBox(d)}
-        <div style="min-width:0"><h2 id="dTitle">${esc(d.t)}</h2><div class="pub">${esc(d.o)}${d.po && d.po !== d.o ? " · " + esc(d.po) : ""}</div></div>
-        <button class="close" id="close" type="button" aria-label="Close">✕</button>
-      </div>
-      <div class="links"><a href="${esc(page)}" target="_blank" rel="noopener">Open on donneesquebec.ca ↗</a><a href="${esc(api)}" target="_blank" rel="noopener">Full metadata (JSON) ↗</a>${web ? `<a href="${esc(web)}" target="_blank" rel="noopener">Publisher's page ↗</a>` : ""}</div>
+    return `
+      <div class="links">${page ? `<a href="${esc(page)}" target="_blank" rel="noopener">Open on ${esc(new URL(page).hostname)} ↗</a>` : ""}${api ? `<a href="${esc(api)}" target="_blank" rel="noopener">Full metadata (JSON) ↗</a>` : ""}${web ? `<a href="${esc(web)}" target="_blank" rel="noopener">Publisher's page ↗</a>` : ""}</div>
       <div class="dsec card scorecard">
         <div class="bigscore">${gradeBox(d, true)}<span class="num">${d.sc} / 100</span></div>
         <div class="subs">${subs}</div>
@@ -429,12 +455,6 @@ details.fold summary { cursor: pointer; font-weight: 700; font-size: 14px; }
       ${colTable(d)}
       ${checks}
       <div class="dsec"><h3>Files (${n(d.files.length)})</h3>${fileTable(d)}</div>`;
-    $("scrim").hidden = false;
-    $("drawer").hidden = false;
-    $("drawer").scrollTop = 0;
-    document.body.style.overflow = "hidden";
-    $("close").focus();
-    lastOpened = i;
   }
   let lastOpened = null;
   function closeDrawer() {
@@ -474,10 +494,11 @@ details.fold summary { cursor: pointer; font-weight: 700; font-size: 14px; }
 
   state = blank();
   if (window.matchMedia("(max-width: 900px)").matches) $("filterBox").open = false;
-  fetch("data.json").then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).then((data) => {
+  fetch("index.json").then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).then((data) => {
     FREQ = data.freq;
     D = data.datasets;
-    D.forEach((d, i) => { d._i = i; d._hay =fold([d.t, d.o, d.po, d.g.join(" "), d.tg.join(" "), d.d, d.s, d.cols ? d.cols.c.map((c) => c[0] + " " + c[2]).join(" ") : ""].join(" ")); });
+    // k: parent organisation, keywords and column names, sent for search only
+    D.forEach((d, i) => { d._i = i; d._hay = fold([d.t, d.o, d.g.join(" "), d.d, d.s, d.k].join(" ")); delete d.k; });
     header(data.summary);
     buildFilters();
     bind();

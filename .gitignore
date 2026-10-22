@@ -1,4 +1,5 @@
-# Built copy for the artifact preview; docs/data.json is the published one
-site/data.json
+# Built copy for the artifact preview; docs/index.json and docs/detail/ are the published ones
+site/index.json
+site/detail/
 __pycache__/
 .claude/
