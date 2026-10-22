@@ -1,0 +1,490 @@
+<title>Quebec Open Data Index</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a catalogue register. Summary band on top, sticky filter rail on the left, dense result rows, inspector drawer on the right. */
+:root {
+  --bg: #EDF0EE; --surface: #FFFFFF; --sunken: #E2E7E4; --ink: #15201C; --muted: #55625D; --line: #D0D8D4;
+  --accent: #0D5868; --accent-ink: #FFFFFF; --accent-soft: #D5E8EC;
+  --good: #1B7548; --good-soft: #D9EEE2; --fair: #5A7A12; --fair-soft: #E7EFD2;
+  --warn: #A1640C; --warn-soft: #F5E6CB; --bad: #AD352A; --bad-soft: #F5DBD7; --none: #66706C; --none-soft: #E1E6E3;
+  --scrim: rgba(15, 25, 22, .42); --shadow: 0 10px 40px rgba(15, 30, 26, .18);
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F1513; --surface: #161E1B; --sunken: #1D2723; --ink: #E3EAE7; --muted: #98A6A1; --line: #2A3732;
+    --accent: #6BBBCB; --accent-ink: #0B1B1F; --accent-soft: #173238;
+    --good: #5CC48E; --good-soft: #163527; --fair: #A9C75A; --fair-soft: #283318; --warn: #E3A548; --warn-soft: #3A2C14;
+    --bad: #EF7F72; --bad-soft: #3D1E1A; --none: #9AA5A1; --none-soft: #252E2B;
+    --scrim: rgba(0, 0, 0, .6); --shadow: 0 10px 40px rgba(0, 0, 0, .5); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F1513; --surface: #161E1B; --sunken: #1D2723; --ink: #E3EAE7; --muted: #98A6A1; --line: #2A3732;
+  --accent: #6BBBCB; --accent-ink: #0B1B1F; --accent-soft: #173238;
+  --good: #5CC48E; --good-soft: #163527; --fair: #A9C75A; --fair-soft: #283318; --warn: #E3A548; --warn-soft: #3A2C14;
+  --bad: #EF7F72; --bad-soft: #3D1E1A; --none: #9AA5A1; --none-soft: #252E2B;
+  --scrim: rgba(0, 0, 0, .6); --shadow: 0 10px 40px rgba(0, 0, 0, .5); color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+a { color: var(--accent); text-underline-offset: 2px; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.inner { max-width: 1320px; margin: 0 auto; }
+.mono, .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* Header band */
+.top { background: var(--surface); border-bottom: 1px solid var(--line); padding-block: 28px 22px; }
+.top h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(28px, 4vw, 40px); line-height: 1.05; letter-spacing: -.02em; margin: 0; text-wrap: balance; }
+.top .lede { margin: 10px 0 0; max-width: 68ch; color: var(--muted); }
+.figures { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 18px 0 0; padding: 0; list-style: none; }
+.figures li { display: flex; align-items: baseline; gap: 6px; color: var(--muted); }
+.figures b { font-family: var(--font-mono); font-weight: 500; color: var(--ink); font-size: 18px; }
+.dists { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px 32px; margin-top: 20px; }
+.dist h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 6px; font-weight: 700; }
+.bar { display: flex; height: 30px; border-radius: 6px; overflow: hidden; background: var(--sunken); }
+.bar button { border: 0; padding: 0 6px; min-width: 0; cursor: pointer; font-family: var(--font-mono); font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: clip; transition: filter .15s; }
+.bar button:hover { filter: brightness(.94); }
+.bar button[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--ink); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+/* Tones */
+.t-good { background: var(--good-soft); color: var(--good); }
+.t-fair { background: var(--fair-soft); color: var(--fair); }
+.t-warn { background: var(--warn-soft); color: var(--warn); }
+.t-bad { background: var(--bad-soft); color: var(--bad); }
+.t-none { background: var(--none-soft); color: var(--none); }
+.s-good { background: var(--good); } .s-fair { background: var(--fair); } .s-warn { background: var(--warn); } .s-bad { background: var(--bad); } .s-none { background: var(--none); }
+
+/* Main grid */
+.main { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 28px; padding-block: 24px 48px; align-items: start; }
+@media (max-width: 900px) { .main { grid-template-columns: minmax(0, 1fr); gap: 16px; } }
+
+/* Filters */
+.filters { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); max-height: calc(100vh - 24px); overflow: auto; }
+@media (max-width: 900px) { .filters { position: static; max-height: none; } }
+.filters summary { font-family: var(--font-display); font-weight: 700; font-size: 17px; cursor: pointer; padding: 4px 0; list-style-position: inside; }
+.fgroup { display: grid; gap: 6px; margin-top: 16px; }
+.fgroup > label, .fgroup > .flabel { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; }
+.filters input[type="search"], .filters select, .sortbar select {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); min-width: 0;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 3px 10px; font-size: 13px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.check { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; cursor: pointer; }
+.check input { margin-top: 3px; accent-color: var(--accent); }
+.reset { margin-top: 18px; border: 1px solid var(--line); background: transparent; border-radius: 6px; padding: 7px 12px; cursor: pointer; width: 100%; }
+.reset:hover { background: var(--sunken); }
+
+/* Results */
+.sortbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
+.sortbar .count { color: var(--muted); }
+.sortbar .count b { color: var(--ink); font-family: var(--font-mono); font-weight: 500; }
+.sortbar label { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+.sortbar select { width: auto; }
+.list { display: grid; gap: 8px; }
+.row { display: grid; grid-template-columns: 52px minmax(0, 1fr) 230px; gap: 14px; align-items: start; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; cursor: pointer; transition: border-color .15s; }
+.row:hover { border-color: var(--accent); }
+@media (max-width: 700px) { .row { grid-template-columns: 44px minmax(0, 1fr); } .row .meta { grid-column: 2; } }
+.grade { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 8px; font-family: var(--font-display); font-weight: 700; font-size: 22px; line-height: 1; }
+.grade small { display: block; font-family: var(--font-mono); font-size: 10px; font-weight: 500; margin-top: 2px; }
+.row h3 { margin: 0; font-size: 16px; line-height: 1.3; font-weight: 700; }
+.row h3 button { all: unset; cursor: pointer; overflow-wrap: anywhere; }
+.row h3 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.row .pub { font-size: 13px; color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
+.row .snip { font-size: 14px; color: var(--muted); margin-top: 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.meta { display: grid; gap: 6px; font-size: 13px; justify-items: start; }
+.pill { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 1px 9px; font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+.pill i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.fmts { display: flex; flex-wrap: wrap; gap: 4px; }
+.fmt { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; color: var(--muted); }
+.more { display: block; margin: 16px auto 0; border: 1px solid var(--accent); color: var(--accent); background: transparent; border-radius: 6px; padding: 9px 18px; cursor: pointer; font-weight: 700; }
+.more:hover { background: var(--accent-soft); }
+.empty { background: var(--surface); border: 1px dashed var(--line); border-radius: 8px; padding: 28px; text-align: center; color: var(--muted); }
+
+/* Method section */
+.method { border-top: 1px solid var(--line); padding-block: 32px 48px; }
+.method h2 { font-family: var(--font-display); font-size: 24px; margin: 0 0 8px; letter-spacing: -.01em; }
+.method p { max-width: 72ch; color: var(--muted); }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); background: var(--sunken); position: sticky; top: 0; }
+tr:last-child td { border-bottom: 0; }
+.foot { color: var(--muted); font-size: 13px; padding-block: 0 40px; }
+
+/* Drawer */
+.scrim { position: fixed; inset: 0; background: var(--scrim); z-index: 40; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(760px, 100%); background: var(--bg); z-index: 41; box-shadow: var(--shadow); overflow-y: auto; overscroll-behavior: contain;
+  padding: calc(env(safe-area-inset-top, 0px) + 18px) max(20px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 40px) 22px; }
+.dhead { display: flex; gap: 14px; align-items: flex-start; }
+.dhead h2 { font-family: var(--font-display); font-size: 24px; line-height: 1.15; margin: 0; letter-spacing: -.01em; text-wrap: balance; overflow-wrap: anywhere; }
+.dhead .pub { color: var(--muted); margin-top: 4px; }
+.close { margin-left: auto; flex: none; border: 1px solid var(--line); background: var(--surface); border-radius: 6px; width: 36px; height: 36px; cursor: pointer; font-size: 18px; line-height: 1; }
+.links { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 10px; font-size: 14px; }
+.dsec { margin-top: 22px; }
+.dsec > h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 8px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+.scorecard { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 18px; align-items: center; }
+@media (max-width: 520px) { .scorecard { grid-template-columns: minmax(0, 1fr); } }
+.bigscore { text-align: center; }
+.bigscore .grade { width: 72px; height: 72px; font-size: 38px; margin: 0 auto; border-radius: 10px; }
+.bigscore .num { display: block; margin-top: 6px; font-size: 14px; color: var(--muted); }
+.subs { display: grid; gap: 7px; }
+.sub { display: grid; grid-template-columns: 112px minmax(0, 1fr) 52px; gap: 10px; align-items: center; font-size: 13.5px; }
+.track { height: 8px; border-radius: 4px; background: var(--sunken); overflow: hidden; }
+.track span { display: block; height: 100%; border-radius: 4px; }
+.sub .num { text-align: right; color: var(--muted); font-size: 12.5px; }
+.flags { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.flags li { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; }
+.flags li::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; margin-top: 7px; background: var(--warn); }
+.flags li.plus::before { background: var(--good); }
+dl.facts { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 8px 14px; margin: 0; font-size: 14px; }
+@media (max-width: 520px) { dl.facts { grid-template-columns: minmax(0, 1fr); gap: 2px; } dl.facts dd { margin-bottom: 8px; } }
+dl.facts dt { color: var(--muted); }
+dl.facts dd { margin: 0; overflow-wrap: anywhere; }
+.prose { white-space: pre-wrap; font-size: 14.5px; overflow-wrap: anywhere; max-width: 72ch; }
+details.fold summary { cursor: pointer; font-weight: 700; font-size: 14px; }
+.drawer .tablewrap { max-height: 420px; overflow: auto; }
+.drawer table { font-size: 13px; }
+.drawer td.mono { font-size: 12px; white-space: nowrap; }
+.tick { color: var(--good); font-weight: 700; } .cross { color: var(--bad); font-weight: 700; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<header class="top gutter">
+  <div class="inner">
+    <h1>Quebec Open Data Index</h1>
+    <p class="lede">Every dataset published on donneesquebec.ca, with what it contains, how often it is supposed to be updated, when it last changed, and a quality score to help you decide whether to rely on it. Unofficial. Built from the portal's public catalogue API.</p>
+    <ul class="figures" id="figures"><li>Loading the catalogue…</li></ul>
+    <div class="dists">
+      <div class="dist"><h2>Quality grade</h2><div class="bar" id="gradeBar"></div><div class="legend" id="gradeLegend"></div></div>
+      <div class="dist"><h2>Freshness against the promised schedule</h2><div class="bar" id="freshBar"></div><div class="legend" id="freshLegend"></div></div>
+    </div>
+  </div>
+</header>
+
+<div class="gutter">
+  <div class="inner main">
+    <aside class="filters">
+      <details id="filterBox" open>
+        <summary>Filters</summary>
+        <div class="fgroup">
+          <label for="q">Search</label>
+          <input type="search" id="q" placeholder="Title, topic, column name…" autocomplete="off">
+        </div>
+        <div class="fgroup"><label for="fPub">Publisher</label><select id="fPub"></select></div>
+        <div class="fgroup"><label for="fTheme">Theme</label><select id="fTheme"></select></div>
+        <div class="fgroup"><label for="fFreq">Promised update frequency</label><select id="fFreq"></select></div>
+        <div class="fgroup"><label for="fFmt">File format</label><select id="fFmt"></select></div>
+        <div class="fgroup"><span class="flabel">Grade</span><div class="chips" id="fGrade"></div></div>
+        <div class="fgroup"><span class="flabel">Freshness</span><div class="chips" id="fFresh"></div></div>
+        <div class="fgroup">
+          <span class="flabel">Must have</span>
+          <label class="check"><input type="checkbox" id="tApi"> Queryable through the API</label>
+          <label class="check"><input type="checkbox" id="tCom"> Licence allows commercial use</label>
+          <label class="check"><input type="checkbox" id="tDesc"> Column descriptions</label>
+          <label class="check"><input type="checkbox" id="tCols"> Column list in this index</label>
+          <label class="check"><input type="checkbox" id="tGeo"> Geospatial data</label>
+          <label class="check"><input type="checkbox" id="tStd"> Follows a Québec data standard</label>
+        </div>
+        <button class="reset" id="reset" type="button">Clear all filters</button>
+      </details>
+    </aside>
+
+    <section aria-label="Datasets">
+      <div class="sortbar">
+        <div class="count" id="count">Loading…</div>
+        <label for="sort">Sort by
+          <select id="sort">
+            <option value="score">Best quality score</option>
+            <option value="updated">Most recently updated</option>
+            <option value="views">Most viewed</option>
+            <option value="recent">Most viewed lately</option>
+            <option value="new">Newest on the portal</option>
+            <option value="title">Title A–Z</option>
+          </select>
+        </label>
+      </div>
+      <div class="list" id="list"><div class="empty">Loading 1,614 datasets…</div></div>
+      <button class="more" id="more" type="button" hidden>Show 50 more</button>
+    </section>
+  </div>
+</div>
+
+<section class="method gutter" id="method">
+  <div class="inner">
+    <h2>How the score works</h2>
+    <p>The score adds up six checks, out of 100 points. It uses only what the catalogue publishes about each dataset, so it tells you how well a dataset is maintained and documented, not whether its values are correct. Open the dataset and look at the files before you depend on it.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Check</th><th>Points</th><th>How points are given</th></tr></thead>
+        <tbody>
+          <tr><td>Freshness</td><td class="num">25</td><td>Compares the newest data file date with the promised frequency. On schedule (within 1.5× the interval plus a week): 25. Late (within 3×): 12. Overdue: 0. With no fixed schedule: changed in the last year 18, in 1–3 years 10, older 4. Archives 15. No dates 10.</td></tr>
+          <tr><td>Open format</td><td class="num">15</td><td>15 for an open machine-readable format (CSV, JSON, GeoJSON, XML, GeoPackage, Shapefile, KML…). 9 for Excel, file geodatabases, ZIP or map services only. 0 if the data is only PDF, web pages or images.</td></tr>
+          <tr><td>API access</td><td class="num">10</td><td>10 when at least one file is loaded in the portal's DataStore and can be queried row by row. 7 for a web map or feature service. 0 otherwise.</td></tr>
+          <tr><td>Documentation</td><td class="num">25</td><td>Description length (up to 7), column descriptions as a document or in the metadata (8), methodology notes (5), time coverage stated (3), contact email (2).</td></tr>
+          <tr><td>Portal checks</td><td class="num">15</td><td>Share of the portal's own file checks the publisher marked as met: UTF-8, comma separator, not compressed, standard projection, empty unknown values, ISO dates, '.' decimals, simple booleans. 8 when none were filled in.</td></tr>
+          <tr><td>Licence</td><td class="num">10</td><td>10 when commercial reuse is allowed (CC BY, CC BY-SA, CC0, OGL). 6 for no-derivatives licences. 3 for non-commercial licences.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Grades: A from 85, B from 70, C from 55, D below 55. Column lists come from the main queryable table of each dataset (the most recently changed data file in the DataStore). Views are the portal's own counters; "lately" means the last 14 days.</p>
+  </div>
+</section>
+<footer class="foot gutter"><div class="inner" id="foot">Data: Données Québec catalogue, licensed under CC BY 4.0 unless a dataset says otherwise. This index is not affiliated with Données Québec or the Gouvernement du Québec.</div></footer>
+
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="dTitle" hidden></aside>
+
+<script>
+(() => {
+  const SITE = "https://www.donneesquebec.ca/recherche";
+  const FRESH = {
+    on_time: ["On schedule", "good"], recent: ["Changed this year", "good"], late: ["Running late", "warn"],
+    stale: ["1–3 years old", "warn"], overdue: ["Overdue", "bad"], old: ["3+ years old", "bad"],
+    archive: ["Archive", "none"], unknown: ["No dates", "none"],
+  };
+  const GRADE = { A: "good", B: "fair", C: "warn", D: "bad" };
+  const SUBS = [["Freshness", 25], ["Open format", 15], ["API access", 10], ["Documentation", 25], ["Portal checks", 15], ["Licence", 10]];
+  const TYPES = { donnees: "Data", support: "Documentation", cartes: "Map", web: "Web service", indefini: "Unspecified", archives: "Archive", visualisation_analytique: "Visualization" };
+  const PAGE = 50;
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const safeUrl = (u) => (/^https?:\/\//i.test(u || "") ? u : null);
+  const fold = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const n = (x) => Number(x || 0).toLocaleString("en-CA");
+  const bytes = (b) => !b ? "" : b < 1e3 ? b + " B" : b < 1e6 ? (b / 1e3).toFixed(0) + " KB" : b < 1e9 ? (b / 1e6).toFixed(1) + " MB" : (b / 1e9).toFixed(2) + " GB";
+  const ago = (days) => days == null ? "" : days === 0 ? "today" : days === 1 ? "yesterday" : days < 60 ? days + " days ago" : days < 730 ? Math.round(days / 30.4) + " months ago" : (days / 365).toFixed(1) + " years ago";
+
+  let D = [], FREQ = {}, state;
+  const blank = () => ({ q: "", pub: "", theme: "", freq: "", fmt: "", grades: new Set(), fresh: new Set(), api: false, com: false, desc: false, cols: false, geo: false, std: false, sort: "score", shown: PAGE });
+
+  function pill(st) { const [label, tone] = FRESH[st] || [st, "none"]; return `<span class="pill t-${tone}"><i class="s-${tone}"></i>${esc(label)}</span>`; }
+  function gradeBox(d, big) { return `<div class="grade t-${GRADE[d.gr]}" aria-label="Grade ${d.gr}, ${d.sc} out of 100">${d.gr}${big ? "" : `<small>${d.sc}</small>`}</div>`; }
+
+  function options(sel, entries, allLabel) {
+    sel.innerHTML = `<option value="">${esc(allLabel)}</option>` + entries.map(([v, label, c]) => `<option value="${esc(v)}">${esc(label)} (${n(c)})</option>`).join("");
+  }
+  function counted(list) { const m = new Map(); list.forEach((v) => m.set(v, (m.get(v) || 0) + 1)); return m; }
+
+  function buildFilters() {
+    const pubs = counted(D.map((d) => d.o));
+    options($("fPub"), [...pubs].sort((a, b) => a[0].localeCompare(b[0], "fr")).map(([k, c]) => [k, k, c]), "All publishers");
+    const themes = counted(D.flatMap((d) => d.g));
+    options($("fTheme"), [...themes].sort((a, b) => b[1] - a[1]).map(([k, c]) => [k, k, c]), "All themes");
+    const freqs = counted(D.map((d) => d.fq));
+    options($("fFreq"), Object.keys(FREQ).filter((k) => freqs.has(k)).map((k) => [k, FREQ[k], freqs.get(k)]), "Any frequency");
+    const fmts = counted(D.flatMap((d) => d.fm));
+    options($("fFmt"), [...fmts].filter(([k, c]) => c >= 3).sort((a, b) => b[1] - a[1]).map(([k, c]) => [k, k, c]), "Any format");
+    $("fGrade").innerHTML = ["A", "B", "C", "D"].map((g) => `<button type="button" class="chip" data-grade="${g}" aria-pressed="false">${g}</button>`).join("");
+    $("fFresh").innerHTML = Object.entries(FRESH).map(([k, [label]]) => `<button type="button" class="chip" data-fresh="${k}" aria-pressed="false">${esc(label)}</button>`).join("");
+  }
+
+  function distBar(barId, legendId, keys, labelOf, toneOf, countOf, kind) {
+    const total = D.length;
+    $(barId).innerHTML = keys.filter((k) => countOf(k)).map((k) => {
+      const c = countOf(k), pct = (c / total) * 100;
+      return `<button type="button" class="t-${toneOf(k)}" style="flex:${c} 1 0" data-${kind}="${esc(k)}" aria-pressed="false" title="${esc(labelOf(k))}: ${n(c)} datasets (${pct.toFixed(0)}%)">${pct >= 7 ? esc(kind === "grade" ? k + " " + n(c) : n(c)) : ""}</button>`;
+    }).join("");
+    $(legendId).innerHTML = keys.filter((k) => countOf(k)).map((k) => `<span><i class="s-${toneOf(k)}"></i>${esc(labelOf(k))} <span class="mono">${n(countOf(k))}</span></span>`).join("");
+  }
+
+  function header(summary) {
+    const cols = D.filter((d) => d.cols).length;
+    $("figures").innerHTML = [
+      [summary.datasets, "datasets"], [summary.publishers, "publishers"], [summary.files, "files"], [cols, "with a column list"],
+    ].map(([v, l]) => `<li><b>${n(v)}</b>${esc(l)}</li>`).join("") + `<li>Snapshot <b>${esc(summary.snapshot)}</b></li>`;
+    const g = counted(D.map((d) => d.gr)), f = counted(D.map((d) => d.st));
+    distBar("gradeBar", "gradeLegend", ["A", "B", "C", "D"], (k) => "Grade " + k, (k) => GRADE[k], (k) => g.get(k) || 0, "grade");
+    distBar("freshBar", "freshLegend", Object.keys(FRESH), (k) => FRESH[k][0], (k) => FRESH[k][1], (k) => f.get(k) || 0, "fresh");
+  }
+
+  function hasDesc(d) { return d.fd === "Separate document" || d.fd === "In the description"; }
+
+  function filtered() {
+    const words = fold(state.q).split(/\s+/).filter(Boolean);
+    let out = D.filter((d) =>
+      (!state.pub || d.o === state.pub) && (!state.theme || d.g.includes(state.theme)) &&
+      (!state.freq || d.fq === state.freq) && (!state.fmt || d.fm.includes(state.fmt)) &&
+      (!state.grades.size || state.grades.has(d.gr)) && (!state.fresh.size || state.fresh.has(d.st)) &&
+      (!state.api || d.api) && (!state.com || d.com) && (!state.desc || hasDesc(d)) && (!state.cols || d.cols) &&
+      (!state.geo || d.geo) && (!state.std || d.std) && words.every((w) => d._hay.includes(w)));
+    const by = {
+      score: (a, b) => b.sc - a.sc || b.v - a.v,
+      updated: (a, b) => (b.lu || "").localeCompare(a.lu || ""),
+      views: (a, b) => b.v - a.v, recent: (a, b) => b.vr - a.vr || b.v - a.v,
+      new: (a, b) => (b.cr || "").localeCompare(a.cr || ""),
+      title: (a, b) => a.t.localeCompare(b.t, "fr"),
+    }[state.sort];
+    return out.sort(by);
+  }
+
+  function row(d, i) {
+    const fm = d.fm.slice(0, 5).map((f) => `<span class="fmt">${esc(f)}</span>`).join("") + (d.fm.length > 5 ? `<span class="fmt">+${d.fm.length - 5}</span>` : "");
+    return `<article class="row" data-i="${i}">
+      ${gradeBox(d)}
+      <div style="min-width:0">
+        <h3><button type="button" data-i="${i}">${esc(d.t)}</button></h3>
+        <div class="pub">${esc(d.o)}${d.g.length ? " · " + esc(d.g[0]) : ""}</div>
+        <div class="snip">${esc(d.d.replace(/\s+/g, " ").slice(0, 260))}</div>
+      </div>
+      <div class="meta">
+        <div>${pill(d.st)} <span style="color:var(--muted)">${esc(FREQ[d.fq] || d.fq)}</span></div>
+        <div style="color:var(--muted)">Updated <span class="mono">${esc(d.lu || "unknown")}</span></div>
+        <div class="fmts">${fm}</div>
+        <div style="color:var(--muted)"><span class="mono">${n(d.v)}</span> views${d.api ? " · API" : ""}</div>
+      </div>
+    </article>`;
+  }
+
+  let current = [];
+  function render() {
+    current = filtered();
+    const shown = current.slice(0, state.shown);
+    $("count").innerHTML = current.length === D.length ? `<b>${n(D.length)}</b> datasets` : `<b>${n(current.length)}</b> of ${n(D.length)} datasets match`;
+    $("list").innerHTML = shown.length ? shown.map((d) => row(d, d._i)).join("") :`<div class="empty">No dataset matches these filters. Remove a filter or try a broader search.</div>`;
+    const left = current.length - shown.length;
+    $("more").hidden = left <= 0;
+    $("more").textContent = `Show ${Math.min(PAGE, left)} more (${n(left)} left)`;
+    document.querySelectorAll("[data-grade]").forEach((b) => b.setAttribute("aria-pressed", state.grades.has(b.dataset.grade)));
+    document.querySelectorAll("[data-fresh]").forEach((b) => b.setAttribute("aria-pressed", state.fresh.has(b.dataset.fresh)));
+  }
+
+  function fileTable(d) {
+    if (!d.files.length) return `<p>No files.</p>`;
+    return `<div class="tablewrap"><table><thead><tr><th>File</th><th>Format</th><th>Type</th><th>Changed</th><th>Size</th></tr></thead><tbody>` +
+      d.files.map((f) => {
+        const u = safeUrl(f.u);
+        return `<tr><td>${u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(f.n)}</a>` : esc(f.n)}${f.ds ? ` <span class="fmt">API</span>` : ""}</td>
+          <td class="mono">${esc(f.f)}</td><td>${esc(TYPES[f.ty] || f.ty || "")}</td><td class="mono">${esc(f.lm || "")}</td><td class="mono">${esc(bytes(f.sz))}</td></tr>`;
+      }).join("") + `</tbody></table></div>`;
+  }
+
+  function colTable(d) {
+    const c = d.cols;
+    if (!c) return "";
+    const api = `${SITE}/api/3/action/datastore_search?resource_id=${encodeURIComponent(c.rid)}&limit=5`;
+    return `<div class="dsec"><h3>Columns of the main table</h3>
+      <p style="margin:0 0 8px;font-size:14px">${esc(c.file)} · <span class="mono">${c.rows == null ? "?" : n(c.rows)}</span> rows · <span class="mono">${n(c.c.length)}</span> columns · <a href="${esc(api)}" target="_blank" rel="noopener">First 5 rows as JSON</a></p>
+      <div class="tablewrap"><table><thead><tr><th>Column</th><th>Type</th><th>Description</th></tr></thead><tbody>` +
+      c.c.map(([id, type, label, notes]) => `<tr><td class="mono">${esc(id)}</td><td class="mono">${esc(type)}</td><td>${esc([label, notes].filter(Boolean).join(" — "))}</td></tr>`).join("") +
+      `</tbody></table></div></div>`;
+  }
+
+  function openDrawer(i) {
+    const d = D[i];
+    const page = `${SITE}/dataset/${encodeURIComponent(d.s)}`;
+    const api = `${SITE}/api/3/action/package_show?id=${encodeURIComponent(d.s)}`;
+    const web = safeUrl(d.web);
+    const plus = [];
+    if (d.std) plus.push(`Follows the Québec data standard “${d.std}”`);
+    if (d.ref) plus.push("Marked as reference data (données de référence)");
+    if (d.api) plus.push("At least one file can be queried row by row through the API");
+    if (d.st === "on_time") plus.push(`Updated on schedule (${(FREQ[d.fq] || "").toLowerCase()})`);
+    const subs = SUBS.map(([label, max], k) => {
+      const v = d.sub[k], pct = (v / max) * 100, tone = pct >= 80 ? "good" : pct >= 50 ? "fair" : pct >= 25 ? "warn" : "bad";
+      return `<div class="sub"><span>${label}</span><span class="track"><span class="s-${tone}" style="width:${pct}%"></span></span><span class="num">${v} / ${max}</span></div>`;
+    }).join("");
+    const checks = d.chk.length ? `<div class="dsec"><h3>Portal file checks (publisher's own answers)</h3><div class="tablewrap"><table><thead><tr><th>Check</th><th>Files meeting it</th><th>Files not meeting it</th></tr></thead><tbody>` +
+      d.chk.map(([label, y, no]) => `<tr><td>${esc(label)}</td><td class="num">${y ? `<span class="tick">✓</span> ${y}` : "–"}</td><td class="num">${no ? `<span class="cross">✗</span> ${no}` : "–"}</td></tr>`).join("") + `</tbody></table></div></div>` : "";
+    $("drawer").innerHTML = `
+      <div class="dhead">
+        ${gradeBox(d)}
+        <div style="min-width:0"><h2 id="dTitle">${esc(d.t)}</h2><div class="pub">${esc(d.o)}${d.po && d.po !== d.o ? " · " + esc(d.po) : ""}</div></div>
+        <button class="close" id="close" type="button" aria-label="Close">✕</button>
+      </div>
+      <div class="links"><a href="${esc(page)}" target="_blank" rel="noopener">Open on donneesquebec.ca ↗</a><a href="${esc(api)}" target="_blank" rel="noopener">Full metadata (JSON) ↗</a>${web ? `<a href="${esc(web)}" target="_blank" rel="noopener">Publisher's page ↗</a>` : ""}</div>
+      <div class="dsec card scorecard">
+        <div class="bigscore">${gradeBox(d, true)}<span class="num">${d.sc} / 100</span></div>
+        <div class="subs">${subs}</div>
+      </div>
+      ${d.fl.length || plus.length ? `<div class="dsec"><h3>What to watch</h3><ul class="flags">${plus.map((t) => `<li class="plus">${esc(t)}</li>`).join("")}${d.fl.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>` : ""}
+      <div class="dsec"><h3>At a glance</h3><dl class="facts">
+        <dt>Promised updates</dt><dd>${esc(FREQ[d.fq] || d.fq)}</dd>
+        <dt>Last data change</dt><dd>${pill(d.st)} <span class="mono">${esc(d.lu || "unknown")}</span> ${d.age != null ? `(${esc(ago(d.age))})` : ""}${d.lus === "file added" && d.lu ? `<br><span style="color:var(--muted);font-size:13px">No change dates on the files, so this is the date the newest file was added.</span>` : ""}</dd>
+        <dt>On the portal since</dt><dd class="mono">${esc(d.cr)}</dd>
+        <dt>Time coverage</dt><dd>${esc(d.tc || "Not stated")}</dd>
+        <dt>Area covered</dt><dd>${esc(d.sp || "Not stated")}${d.geo ? " · geospatial" : ""}</dd>
+        <dt>Column descriptions</dt><dd>${esc(d.fd)}</dd>
+        <dt>Licence</dt><dd>${esc(d.lic)}${d.com ? "" : " · no commercial use"}</dd>
+        <dt>Files</dt><dd>${n(d.nf)} (${n(d.nd)} data) · ${d.fm.map((f) => `<span class="fmt">${esc(f)}</span>`).join(" ")}</dd>
+        <dt>Themes</dt><dd>${esc(d.g.join(", ") || "None")}</dd>
+        <dt>Keywords</dt><dd>${esc(d.tg.join(", ") || "None")}</dd>
+        <dt>Contact</dt><dd>${esc(d.au || "Not stated")}${d.em ? ` · <span class="mono">${esc(d.em)}</span>` : ""}</dd>
+        <dt>Views</dt><dd><span class="mono">${n(d.v)}</span> total · <span class="mono">${n(d.vr)}</span> lately</dd>
+      </dl></div>
+      <div class="dsec"><h3>Description</h3><div class="prose">${esc(d.d || "No description.")}</div></div>
+      ${d.m ? `<div class="dsec"><details class="fold"><summary>Methodology and extra information</summary><div class="prose" style="margin-top:8px">${esc(d.m)}</div></details></div>` : ""}
+      ${colTable(d)}
+      ${checks}
+      <div class="dsec"><h3>Files (${n(d.files.length)})</h3>${fileTable(d)}</div>`;
+    $("scrim").hidden = false;
+    $("drawer").hidden = false;
+    $("drawer").scrollTop = 0;
+    document.body.style.overflow = "hidden";
+    $("close").focus();
+    lastOpened = i;
+  }
+  let lastOpened = null;
+  function closeDrawer() {
+    $("drawer").hidden = true;
+    $("scrim").hidden = true;
+    document.body.style.overflow = "";
+    const b = document.querySelector(`.row h3 button[data-i="${lastOpened}"]`);
+    if (b) b.focus();
+  }
+
+  function bind() {
+    const on = (id, ev, fn) => $(id).addEventListener(ev, fn);
+    let t;
+    on("q", "input", () => { clearTimeout(t); t = setTimeout(() => { state.q = $("q").value; state.shown = PAGE; render(); }, 120); });
+    [["fPub", "pub"], ["fTheme", "theme"], ["fFreq", "freq"], ["fFmt", "fmt"], ["sort", "sort"]].forEach(([id, k]) =>
+      on(id, "change", () => { state[k] = $(id).value; state.shown = PAGE; render(); }));
+    [["tApi", "api"], ["tCom", "com"], ["tDesc", "desc"], ["tCols", "cols"], ["tGeo", "geo"], ["tStd", "std"]].forEach(([id, k]) =>
+      on(id, "change", () => { state[k] = $(id).checked; state.shown = PAGE; render(); }));
+    document.addEventListener("click", (e) => {
+      const g = e.target.closest("[data-grade]"), f = e.target.closest("[data-fresh]");
+      if (g) { const s = state.grades; s.has(g.dataset.grade) ? s.delete(g.dataset.grade) : s.add(g.dataset.grade); state.shown = PAGE; render(); return; }
+      if (f) { const s = state.fresh; s.has(f.dataset.fresh) ? s.delete(f.dataset.fresh) : s.add(f.dataset.fresh); state.shown = PAGE; render(); return; }
+      const r = e.target.closest(".row");
+      if (r && !e.target.closest("a")) openDrawer(+r.dataset.i);
+    });
+    on("more", "click", () => { state.shown += PAGE; render(); });
+    on("scrim", "click", closeDrawer);
+    $("drawer").addEventListener("click", (e) => { if (e.target.closest("#close")) closeDrawer(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("drawer").hidden) closeDrawer(); });
+    on("reset", "click", () => {
+      state = blank();
+      $("q").value = ""; ["fPub", "fTheme", "fFreq", "fFmt"].forEach((id) => ($(id).value = "")); $("sort").value = "score";
+      ["tApi", "tCom", "tDesc", "tCols", "tGeo", "tStd"].forEach((id) => ($(id).checked = false));
+      render();
+    });
+  }
+
+  state = blank();
+  if (window.matchMedia("(max-width: 900px)").matches) $("filterBox").open = false;
+  fetch("data.json").then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).then((data) => {
+    FREQ = data.freq;
+    D = data.datasets;
+    D.forEach((d, i) => { d._i = i; d._hay =fold([d.t, d.o, d.po, d.g.join(" "), d.tg.join(" "), d.d, d.s, d.cols ? d.cols.c.map((c) => c[0] + " " + c[2]).join(" ") : ""].join(" ")); });
+    header(data.summary);
+    buildFilters();
+    bind();
+    render();
+  }).catch((err) => {
+    $("list").innerHTML = `<div class="empty">The dataset list could not be loaded (${esc(err.message)}). Reload the page to try again.</div>`;
+    $("count").textContent = "";
+  });
+})();
+</script>
