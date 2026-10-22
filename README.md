@@ -2,7 +2,7 @@
 
 An index of **every dataset on the open data portals of Canada's provinces and territories**, plus the federal departments' core collection on [open.canada.ca](https://open.canada.ca). For each dataset it lists what it contains, how often the publisher promised to update it, when it last changed, and a quality score to help you decide whether you can rely on it. Every portal is scored by the same rules, so the portals can be compared.
 
-Snapshot: **2026-10-22** · **13 portals** · **24,343 datasets** · **521 publishers** · **116,188 files** · column lists for **3,531 datasets**
+Snapshot: **2026-10-22** · **13 portals** · **24,343 datasets** · **521 publishers** · **116,188 files** · column lists for **5,592 datasets**
 
 > Unofficial. Built from each portal's public catalogue API. Not affiliated with any government.
 
@@ -12,7 +12,7 @@ Snapshot: **2026-10-22** · **13 portals** · **24,343 datasets** · **521 publi
 - **Spreadsheets** (UTF-8 CSV, open in Excel), each starting with a `province` column:
   - [`data/datasets.csv`](data/datasets.csv): one row per dataset, 43 columns, including the score and every warning
   - [`data/files.csv`](data/files.csv): one row per file (116,188), with format, last change, size, download link and the portal's file checks
-  - [`data/columns.csv`](data/columns.csv): one row per column of each dataset's main table (60,227 rows)
+  - [`data/columns.csv`](data/columns.csv): one row per column of each dataset's main table (94,422 rows)
 
 To open the interactive index locally, serve the folder (browsers block the page's data files when it is opened as a plain file):
 
@@ -53,15 +53,15 @@ Ontario also lists 1,007 datasets "under review" and 820 "restricted": promised,
 | Saskatchewan | 129 | 0 | 35 | 73 | 21 | 62 | 86% |
 | New Brunswick | 319 | 0 | 115 | 147 | 57 | 59 | 100% |
 | Prince Edward Island | 90 | 0 | 1 | 78 | 11 | 58 | 100% |
-| Ontario | 1,137 | 80 | 124 | 373 | 560 | 55 | 0% |
-| Federal | 13,845 | 65 | 896 | 5,160 | 7,724 | 52 | 0% |
-| British Columbia | 2,445 | 42 | 427 | 622 | 1,354 | 52 | 42% |
+| Ontario | 1,137 | 107 | 106 | 365 | 559 | 55 | 38% |
+| Federal | 13,845 | 65 | 896 | 5,160 | 7,724 | 52 | 8% |
+| British Columbia | 2,445 | 42 | 427 | 622 | 1,354 | 52 | 62% |
 | Yukon | 493 | 0 | 0 | 44 | 449 | 45 | 0% |
 | Newfoundland and Labrador | 76 | 0 | 0 | 0 | 76 | 43 | 0% |
 | Alberta | 3,018 | 0 | 93 | 219 | 2,706 | 39 | 0% |
-| Northwest Territories | 341 | 0 | 1 | 5 | 335 | 29 | 0% |
+| Northwest Territories | 341 | 0 | 1 | 5 | 335 | 29 | 3% |
 
-Column lists come from the DataStore (Québec), the catalogue (BC, Nova Scotia, New Brunswick) or the feature service (ArcGIS Hub). Ontario's and the Northwest Territories' DataStore columns aren't fetched yet.
+Column lists come from the CKAN DataStore (Québec, Ontario, BC, Northwest Territories, federal), the catalogue (BC, Nova Scotia, New Brunswick) or the feature service (ArcGIS Hub). Alberta has 306 DataStore tables, but its DataStore answered every call with HTTP 500 on 2026-10-22, so it has no column lists. Yukon and the Newfoundland records have no DataStore tables.
 
 | Freshness | Datasets |
 |---|---|
@@ -103,7 +103,7 @@ Grades: **A** from 85, **B** from 70, **C** from 55, **D** below 55.
 
 **Same rules everywhere.** A field the portal doesn't have gets neutral points, and a field the portal has but the publisher left empty gets 0. So methodology gets 3 of 5 and time coverage 2 of 3 on portals with no such field, and portal checks 8 of 15 where there are none. Without this, datasets would lose points for fields their portal never offered.
 
-**Limits.** The score only uses what the catalogue says about each dataset. It shows how well a dataset is maintained and documented, not whether its values are correct, so look at the files before you depend on one. Portal checks are answers the publisher filled in (Québec) or the portal's own validation (Ontario), not tests run by this index. Column lists cover only the main table of each dataset; the DataStore stores many columns as `text` even when they hold numbers or dates. Datasets served only as external links have no column list. Decisions and findings for each portal are in [`CANADA-PLAN.md`](CANADA-PLAN.md), sections 10 to 13.
+**Limits.** The score only uses what the catalogue says about each dataset. It shows how well a dataset is maintained and documented, not whether its values are correct, so look at the files before you depend on one. Portal checks are answers the publisher filled in (Québec) or the portal's own validation (Ontario), not tests run by this index. Column lists cover only the main table of each dataset; the DataStore stores many columns as `text` even when they hold numbers or dates. Datasets served only as external links have no column list. Decisions and findings for each portal are in [`CANADA-PLAN.md`](CANADA-PLAN.md), sections 10 to 14.
 
 ## Québec notes
 
@@ -122,11 +122,11 @@ Everything uses Python 3 with the standard library only. The portals are listed 
 | 1. Crawl the Québec WordPress sitemaps | [`scripts/crawl_sitemaps.py`](scripts/crawl_sitemaps.py) | `sitemaps/sitemap_urls.csv` |
 | 2. Download each portal's catalogue (CKAN `package_search` and the Socrata catalogue 500 datasets per call, the Hub search 100 per call plus each item's record and feature service) | [`scripts/fetch_catalogue.py`](scripts/fetch_catalogue.py) | `raw/<code>/packages.json.gz` |
 | 3. Download Données Québec's field definitions | `curl` of `scheming_dataset_schema_show` | `raw/QC/schema.json` |
-| 4. Fetch the column list and row count of each Québec dataset's main table (one `datastore_search?limit=0` call per dataset, 1.2 s apart) | [`scripts/fetch_columns.py`](scripts/fetch_columns.py) | `raw/QC/columns.jsonl` |
+| 4. Fetch the column list and row count of each dataset's main DataStore table on the CKAN portals (one `datastore_search?limit=0` call per dataset, 1.2 s apart; 3 at a time on the federal portal, whose DataStore is slow) | [`scripts/fetch_columns.py`](scripts/fetch_columns.py) | `raw/<code>/columns.jsonl` |
 | 5. Turn each portal's catalogue into common records, score every dataset and write the CSVs and page data | [`scripts/normalize.py`](scripts/normalize.py), [`scripts/build_index.py`](scripts/build_index.py) | `data/*.csv`, `site/index.json` (one slim row per dataset, loaded at start), `site/detail/<code>.json` (full records, loaded when a dataset from that portal is opened) |
 | 6. Package the page for static hosting | [`scripts/make_site.py`](scripts/make_site.py) | `docs/index.html`, `docs/index.json`, `docs/detail/` |
 
-[`run_all.sh`](run_all.sh) runs all six steps for a fresh snapshot (about an hour, mostly the polite column fetch):
+[`run_all.sh`](run_all.sh) runs all six steps for a fresh snapshot (about an hour and a half, mostly the polite column fetch):
 
 ```bash
 ./run_all.sh 2026-11-01

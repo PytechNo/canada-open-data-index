@@ -172,7 +172,10 @@ for p in recs:
     fd_vals = Counter(r["col_desc"] for r in data_res)
     dict_doc = any(r["dictionary"] or (r["doc"] and DICT_NAME.search(r["name"] or "")) for r in res)
     fields_rec = p["columns"] or {}
-    labelled_cols = any((c.get("label") or c.get("notes")) for c in fields_rec.get("fields") or [])
+    # a label or note that only repeats the column name (2 Ontario tables) doesn't describe it
+    same = lambda a, b: " ".join(a.replace("_", " ").casefold().split()) == " ".join(b.replace("_", " ").casefold().split())
+    labelled_cols = any(v and not same(v, c["id"]) for c in fields_rec.get("fields") or []
+                        for v in (c.get("label"), c.get("notes")))
     if fd_vals.get("Separate document") or dict_doc:
         field_desc = "Separate document"
     elif fd_vals.get("In the description") or labelled_cols:

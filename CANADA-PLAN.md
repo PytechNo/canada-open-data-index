@@ -120,7 +120,7 @@ Each phase ends with something that runs.
 | 2 | CKAN provinces: ON, BC, AB, YT, NT (and NL if the portal is back); field maps; filters; frequency and licence tables | ~7,400 more datasets build; every frequency and licence value seen is mapped (the build stops and lists any that aren't). **Done 2026-10-22:** 7,510 more datasets (9,124 in all); decisions in section 10 |
 | 3 | Socrata fetcher and normaliser: NS, NB | 1,032 more; columns come from the catalogue. **Done 2026-10-22:** 1,032 more datasets (10,156 in all); the 9,124 earlier rows are unchanged; decisions in section 11 |
 | 4 | Hub fetcher and normaliser: MB, SK, PE, plus one FeatureServer call per item for fields and last edit date | 342 more. **Done 2026-10-22:** 342 more datasets (10,498 in all); the 10,156 earlier rows are unchanged; decisions in section 12 |
-| 5 | Columns: DataStore for ON and NT through the existing `fetch_columns.py` (it already resumes and waits 1.2 s per call) | column lists for every platform that has them |
+| 5 | Columns: DataStore for ON and NT through the existing `fetch_columns.py` (it already resumes and waits 1.2 s per call) | column lists for every platform that has them. **Done 2026-10-22** for ON, NT, BC and the federal portal too: 2,061 more datasets with a column list (5,592 in all); AB's DataStore is broken; decisions in section 14 |
 | 6 | Split JSON, province filter, comparison table, README, `run_all.sh` loop | the site serves locally and on Pages. **Split done 2026-10-22** (section 13). **Rest done 2026-10-22:** portal filter, portal name on each row and in the dataset panel, "Portals compared" table at the top (sorted by median score, Nunavut as "no open data portal"; clicking a portal filters the list), Canada-wide page header, method notes and README, `run_all.sh` reads its portal list from `portals.py`, and `data/` and `docs/` rebuilt for all 24,343 datasets. Checked locally; Pages updates on the next push |
 | 7 | Rename the repo (if chosen) and publish | live link works |
 
@@ -252,4 +252,33 @@ Phase 2 covers 84% of the new datasets with one fetcher, so it goes first after 
 - **Bulk-load dates.** Federal files have no change date (StatCan: 2 of 10,010 records have one), only a creation date, and StatCan re-creates a table's files when it releases it. But the catalogue was also reloaded in bulk: 3,738 records were created on 2023-01-17 (437 of their titles end in "inactive"), 1,413 on 2016-12-01 (the migration), 326 on 2023-11-08. A creation date shared by 300+ records is treated as no date, so those 5,451 records are "No dates" (10 of 25 freshness points) instead of "overdue" on a load date. The next largest group is 135 records (2025-05-26), treated as a real release day. 2023-11-08 is the least certain, but 93% of those records promise "as needed" updates, where a 3-year-old date and no date both score 10. StatCan's own site and API were down on 2026-10-22, so release dates couldn't be checked against it.
 - **Findings:** Statistics Canada is 10,010 of the 13,845 (median 52; the other departments 55). Average points: freshness 11.3/25, format 14.3/15, API 1.0/10 (only a few files are in the DataStore), documentation 10.2/25, portal checks 8/15 (none, so neutral), licence 10/10. 13,209 have no column descriptions in the catalogue, 2,387 very short descriptions, 1,259 no frequency.
 - Checked: 5 random federal records match the live `package_show` on title, frequency, file count and newest file date (the one on a bulk date shows "No dates").
-- Not done: column lists (`fetch_columns.py` still only knows the Quebec DataStore), and the published `data/` and `docs/` aren't regenerated.
+- Not done at the time: column lists (`fetch_columns.py` only knew the Quebec DataStore). Done in phase 5, section 14.
+
+## 14. Phase 5: DataStore columns on every CKAN portal (2026-10-22)
+
+**Result** (one `datastore_search?limit=0` call per dataset that has a DataStore table):
+
+| Portal | Tables called | Column lists | Errors | Datasets with a column list (before → after) |
+|---|---|---|---|---|
+| ON | 436 | 436 | 0 | 0% → 38% (436) |
+| BC | 507 | 507 | 0 | 42% → 62% (1,034 → 1,522; the catalogue's own column list wins on the 19 that have both) |
+| NT | 11 | 11 | 0 | 0% → 3% (11) |
+| CA | 1,134 | 1,126 | 7 not found, 1 server error | 0% → 8% (1,126) |
+| AB | 306 | 0 | 306 server errors | 0% |
+
+`columns.csv` grows from 60,227 to 94,422 rows. Every other portal's rows in all three CSVs are unchanged.
+
+**How the fetcher works now:**
+- `fetch_columns.py <code> <packages> <out>` reads the API from `portals.py`. The main table is the newest DataStore resource marked as data (QC `donnees`, BC `data`, ON type `data`, CA `dataset`), else any DataStore resource. It picks the same table as before for all 1,160 Quebec datasets.
+- The timeout is 20 s, and a call that times out is tried once more straight away. An HTTP error is the server's answer and is kept. A rerun fetches again only the datasets whose last line is a network error (the build reads the last line per dataset), and `run_all.sh` makes that second pass for every portal.
+- **Federal speed.** open.canada.ca takes 2–10 s to answer for a table it hasn't touched yet, and well under a second after that, whether or not the row count is asked for (timed on 8 tables, alternating the order). So skipping the count (`include_total=false`) wouldn't help. One call at a time ran at 7–8.5 s per table, and the 60 s timeouts took 27% of the time. With `column_workers: 3` in `portals.py` (3 calls at once, each followed by the 1.2 s pause), it ran at about 1.2 s per table. 83 tables timed out twice in the first pass; 73 came back on the second and the last 10 on the third.
+
+**Scoring:**
+- **Column descriptions.** ON is the only new portal whose DataStore columns carry descriptions (`info.notes`, often in both languages): 133 datasets. 92 of them gain 8 documentation points ("No column descriptions found" goes away); the others already had a data dictionary file. A label or note that only repeats the column name doesn't count (2 ON tables, e.g. "Adoption Practitioners"; no Quebec table does this). ON grades move from 80/124/373/560 to 107/106/365/559 (A/B/C/D); its median stays 55.
+- BC, NT and federal DataStore columns have names and types only, so their scores don't move.
+- The 7 federal tables that answer "not found" get the existing "API table missing" warning.
+
+**Findings:**
+- **AB:** `datastore_search` and `datastore_info` both answer HTTP 500 for every one of the 306 tables (sampled first, then all 306). Those datasets still get 10 API points, because the catalogue marks their files as DataStore tables; the build only flags a missing table on a 404. Whether a portal-wide 500 should cost the API points is left open.
+- **CA:** 1,134 of the 13,845 records have a DataStore table, and the tables hold 23.9 million rows in all. None of the columns has a description.
+- **ON:** the 436 tables hold 9.9 million rows. 8 of the 133 described tables describe only some of their columns.

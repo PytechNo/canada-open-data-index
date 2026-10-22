@@ -38,7 +38,9 @@ PORTALS = {
            "api": "https://data.princeedwardisland.ca/api/search/v1/collections/dataset/items",
            "page": "https://data.princeedwardisland.ca/datasets/{id}"},
     # federal departments only: "primary" is the core open data collection; the portal's provincial copies,
-    # publications, parliamentary reports and the geospatial collections (geogratis, fgp) stay out
+    # publications, parliamentary reports and the geospatial collections (geogratis, fgp) stay out.
+    # column_workers: its DataStore takes 2-10 s to answer for each table it hasn't touched yet, so 3 column calls run at once
     "CA": {"name": "Federal", "platform": "ckan", "api": "https://open.canada.ca/data/api/3/action",
-           "page": "https://open.canada.ca/data/en/dataset/{id}", "fq": "jurisdiction:federal AND collection:primary"},
+           "page": "https://open.canada.ca/data/en/dataset/{id}", "fq": "jurisdiction:federal AND collection:primary",
+           "column_workers": 3},
 }

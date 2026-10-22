@@ -3,3 +3,4 @@ site/index.json
 site/detail/
 __pycache__/
 .claude/
+backup/
