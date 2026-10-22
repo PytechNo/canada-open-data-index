@@ -6,7 +6,9 @@ cd "$(dirname "$0")"
 SNAPSHOT="${1:-$(date +%F)}"
 
 python scripts/crawl_sitemaps.py sitemaps/sitemap_urls.csv
-python scripts/fetch_catalogue.py QC raw/QC
+for code in QC ON BC AB YT NT NL; do
+  python scripts/fetch_catalogue.py "$code" "raw/$code"
+done
 curl -sSL -o raw/QC/schema.json "https://www.donneesquebec.ca/recherche/api/3/action/scheming_dataset_schema_show?type=dataset"
 rm -f raw/QC/columns.jsonl
 python scripts/fetch_columns.py raw/QC/packages.json.gz raw/QC/columns.jsonl

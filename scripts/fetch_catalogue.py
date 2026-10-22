@@ -7,12 +7,14 @@ import json
 import os
 import sys
 import time
+import urllib.parse
 import urllib.request
 
 from portals import PORTALS
 
 code, out_dir = sys.argv[1], sys.argv[2]
 API = PORTALS[code]["api"] + "/package_search"
+FQ = urllib.parse.quote(PORTALS[code].get("fq", ""))
 ROWS = 500
 out_path = os.path.join(out_dir, "packages.json.gz")
 
@@ -26,7 +28,8 @@ def get(url):
 packages = []
 start = 0
 while True:
-    data = get(f"{API}?rows={ROWS}&start={start}&include_private=false")
+    # sorted so pages don't shift if a dataset changes mid-download
+    data = get(f"{API}?rows={ROWS}&start={start}&include_private=false&sort=name%20asc&fq={FQ}")
     res = data["result"]
     packages.extend(res["results"])
     print(f"start={start} got={len(res['results'])} total={res['count']}", flush=True)

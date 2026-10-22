@@ -116,7 +116,7 @@ Each phase ends with something that runs.
 |---|---|---|
 | 0 | Decide the open questions in section 8 | answers written here |
 | 1 | `portals.py` with QC only; `normalize.py` with the CKAN normaliser and QC field map; rewrite the `build_index.py` loop to read common records; move raw to `raw/QC/` | **Rerun on today's Quebec raw data gives the same `datasets.csv`, `files.csv` and `columns.csv` as now, apart from the new `province` column** (diff is the test). **Done 2026-10-22:** all three CSVs match row for row, and `data.json` matches apart from the new `pr` and `u` keys |
-| 2 | CKAN provinces: ON, BC, AB, YT, NT (and NL if the portal is back); field maps; filters; frequency and licence tables | ~7,400 more datasets build; every frequency and licence value seen is mapped (the build stops and lists any that aren't) |
+| 2 | CKAN provinces: ON, BC, AB, YT, NT (and NL if the portal is back); field maps; filters; frequency and licence tables | ~7,400 more datasets build; every frequency and licence value seen is mapped (the build stops and lists any that aren't). **Done 2026-10-22:** 7,510 more datasets (9,124 in all); decisions in section 10 |
 | 3 | Socrata fetcher and normaliser: NS, NB | 1,032 more; columns come from the catalogue |
 | 4 | Hub fetcher and normaliser: MB, SK, PE, plus one FeatureServer call per item for fields and last edit date | 342 more |
 | 5 | Columns: DataStore for ON and NT through the existing `fetch_columns.py` (it already resumes and waits 1.2 s per call) | column lists for every platform that has them |
@@ -146,3 +146,32 @@ Phase 2 covers 84% of the new datasets with one fetcher, so it goes first after 
 - **Federal portal** (36,119 federal-only records with `jurisdiction:federal`). It's the biggest single source, and its ISO 8601 frequencies (`P1Y`, `P3M`, `P2W`) convert to days directly. Its size alone (about 160 MB of detail JSON) means it needs the split from section 5 first.
 - **Municipal portals** (Montréal, Toronto, Calgary, Vancouver, Ottawa, …). Same three platforms, so mostly config once v1 exists.
 - **Snapshot history**: keep each run's slim index, to chart freshness over time per province.
+
+## 10. Phase 2 decisions and findings (2026-10-22)
+
+**Result** (snapshot 2026-10-22; columns for BC come from its catalogue, DataStore columns for ON and NT wait for phase 5):
+
+| Province | Datasets | A | B | C | D | Median score |
+|---|---|---|---|---|---|---|
+| QC | 1,614 | 505 | 558 | 389 | 162 | 76 |
+| ON | 1,137 | 80 | 124 | 373 | 560 | 55 |
+| BC | 2,445 | 42 | 427 | 622 | 1,354 | 52 |
+| AB | 3,018 | 0 | 93 | 219 | 2,706 | 39 |
+| YT | 493 | 0 | 0 | 44 | 449 | 45 |
+| NT | 341 | 0 | 1 | 5 | 335 | 29 |
+| NL | 76 | 0 | 0 | 0 | 76 | 43 |
+
+**Scoring changes, applied to every province:**
+- **Publisher's data date as a fallback.** When no data file has a modified date, use the portal's own dataset-level data date (ON `current_as_of`, BC `dates` Modified/Revised, AB `date_modified`, NT `modified_date`) before falling back on when the file was added. Without it, Alberta's records, re-imported on 2026-09-06, all looked fresh. Quebec has no such field, so it's unaffected.
+- **Neutral half points** for methodology (3 of 5) and time coverage (2 of 3) where the portal has no such field (section 4).
+- **"Not stated" frequency** (new code `notStated`) scores like "no fixed schedule" and adds the warning "No update frequency promised". There's also a new code `biweekly` (14 days).
+- **Licences.** Creative Commons is scored as before. Every other licence is listed by title in `LICENCES` in `build_index.py`: 10 for open licences, 3 for Crown copyright terms that allow non-commercial reproduction (King's Printer, Ontario.ca terms), and 0 for no open licence ("Access Only", "No licence", "Not specified", ministry terms of use), with the new warning "No open licence". BC's King's Printer licence and the old Ontario Open Data Terms of Use (4 datasets) aren't checked against their full text.
+- **Mislabelled links are corrected** (`fix_links` in `normalize.py`). A web-page link whose URL ends in `.csv`, `.zip` and so on takes that format. `…/metadata/….xml` becomes a `METADATA` document, not data, and an ArcGIS Online item page counts as a map service. For Quebec this only changed the format list of 23 datasets; no score moved.
+- **Quebec's `files.csv`** now shows the checklist answers as `yes`/`no`/`n/a` (was `oui`/`non`/`n/a`), and column descriptions as "Separate document" / "In the description" / "Missing" (was the `relidi.descha.*` codes).
+
+**Per-portal findings:**
+- **AB:** 1,339 of the 3,018 records are Alberta Energy Regulator map layers imported from GeoDiscover. Their only links are metadata pages (no data files), they promise updates "every 2 months", and they were last dated 2016, so they're overdue.
+- **BC:** 543 public records are "Access Only" (no open licence). Geographic Warehouse layers are scored as open formats (`MULTIPLE`: shapefile, CSV, file geodatabase or KML on request).
+- **YT:** most records link to ArcGIS Online items and GeoYukon pages, not files. 428 of 493 promise "ad hoc" updates. Dataset pages are `open.yukon.ca/data/{name}`.
+- **NT:** descriptions are title-length (median 54 characters), no record gives a contact email, and 286 of 341 records only link to a StatsNWT web page.
+- **NL:** the portal still returned HTTP 500, so the index uses the 76 federal copies. Their file and modified dates are federal sync dates (64 records share 2026-02-06), so freshness uses the original publication date (2013–2016) and the frequency is "unknown".

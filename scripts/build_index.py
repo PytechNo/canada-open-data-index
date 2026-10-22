@@ -11,28 +11,40 @@ import sys
 from collections import Counter
 from datetime import date, datetime
 
-from normalize import records
+from normalize import FREQ, records
 
 raw_root, out_dir, snapshot = sys.argv[1], sys.argv[2], sys.argv[3]
 TODAY = date.fromisoformat(snapshot)
 
-FREQ = {  # code: (English label, expected days between updates or None)
-    "continuous": ("Real time", 1), "hourly": ("Hourly", 1), "daily": ("Daily", 1),
-    "weekly": ("Weekly", 7), "monthly": ("Monthly", 31), "bimonthly": ("Every 2 months", 61),
-    "quarterly": ("Quarterly", 92), "semiannual": ("Twice a year", 183), "annual": ("Yearly", 366),
-    "biennial": ("Every 2 years", 731), "triennial": ("Every 3 years", 1096),
-    "quinquennial": ("Every 5 years", 1827), "asNeeded": ("As needed", None),
-    "irregular": ("Irregular", None), "notPlanned": ("No updates planned", None),
-    "archives": ("Archive", None),
-}
-
+# MULTIPLE: BC Geographic Warehouse objects, downloaded as shapefile, CSV, file geodatabase or KML on request
 OPEN_FORMATS = {"CSV", "TSV", "JSON", "GEOJSON", "XML", "GPKG", "GML", "KML", "KMZ", "SHP", "GTFS",
                 "SQLITE", "ODS", "RINEX", "GEOTIFF", "TIFF", "TXT", "JSONL", "PARQUET", "LAS", "LAZ",
-                "NETCDF", "GEOPACKAGE", "ATOM", "RSS", "IVT", "3DM", "JPEG2000"}
+                "NETCDF", "GEOPACKAGE", "ATOM", "RSS", "IVT", "3DM", "JPEG2000", "ASCII GRID", "MULTIPLE"}
 STRUCTURED_FORMATS = {"XLSX", "XLS", "FGDB", "GDB", "ZIP", "DWG", "DGN", "DXF", "ECW", "LYR", "QML",
                       "MDB", "ACCDB", "SAV", "DTA"}
 SERVICE_FORMATS = {"WMS", "WFS", "WMTS", "ESRIREST", "API", "REST", "OGC", "WCS", "ARCGIS"}
-YES, NO = {"oui", "yes"}, {"non", "no"}
+# Licences other than Creative Commons, by title in lowercase words: 10 commercial reuse allowed,
+# 3 non-commercial only, 0 no open licence. The build stops on a title that isn't listed here.
+LICENCES = {
+    "ogl canada 2 0": 10, "open government licence canada": 10, "statistics canada open licence": 10,
+    "open government licence ontario": 10, "open government licence british columbia": 10,
+    "open government licence alberta": 10, "open government licence yukon": 10,
+    "open government licence northwest territories": 10, "open government licence newfoundland and labrador": 10,
+    "open government licence bc assessment": 10, "open government licence destination bc": 10,
+    "open government licence skilledtradesbc": 10, "open government licence translink": 10,
+    "open government licence municipality of north cowichan": 10, "elections bc open data licence": 10,
+    "bc energy regulator open data license": 10, "open data licence for icbc information": 10,
+    "open data licence office of the registrar of lobbyists for british columbia": 10,
+    "open licence university of northern british columbia": 10,
+    "open data commons public domain dedication and licence": 10, "apache license 2 0": 10, "other open": 10,
+    # Crown copyright terms: reproduction for non-commercial purposes without asking
+    "king s printer for ontario": 3, "ontario ca terms of use": 3,
+    # shortcut: BC King's Printer and the old Ontario terms of use aren't checked against their full text
+    "king s printer licence british columbia": 3, "ontario open data terms of use": 0,
+    "public sector salary disclosure act": 0, "ministry terms of use": 0, "access only": 0, "no licence": 0,
+    "licence not specified": 0, "license not specified": 0,
+}
+UNKNOWN_LICENCES = set()
 DICT_NAME = re.compile(r"dictionnaire|description des (champs|donn|attributs|colonnes)|m[ée]tadonn[ée]es|"
                        r"structure|sch[ée]ma|data dictionary|guide|documentation|lisez", re.I)
 
@@ -84,13 +96,16 @@ def freshness(freq, last):
     return "old", 4, age
 
 
-def licence_info(lid):
+def licence_info(lid, title):
     l = (lid or "").lower()
-    if "nc" in l.split("-"):
-        return False, 3
-    if "nd" in l.split("-"):
-        return True, 6
-    return True, 10
+    if l.startswith("cc"):
+        parts = l.split("-")
+        return "nc" not in parts, 3 if "nc" in parts else 6 if "nd" in parts else 10
+    key = re.sub(r"[\W_]+", " ", (title or l).lower()).strip()
+    if key not in LICENCES:
+        UNKNOWN_LICENCES.add(title or lid)
+    pts = LICENCES.get(key, 0)
+    return pts >= 6, pts
 
 
 recs = records(raw_root)
@@ -103,10 +118,13 @@ for p in recs:
     formats = sorted({r["format"] for r in res if r["format"]})
     data_formats = {r["format"] for r in data_res if r["format"]} or set(formats)
 
-    # last data update: newest last_modified among data files, else their creation date
+    # last data update: newest last_modified among data files, else the publisher's own data date,
+    # else the files' creation date
     dated = [as_date(r["modified"]) for r in (data_res or res)]
     dated = [d for d in dated if d]
     last_src = "file modified"
+    if not dated and as_date(p["data_date"]):
+        dated, last_src = [as_date(p["data_date"])], "publisher's date"
     if not dated:
         dated = [d for d in (as_date(r["added"]) for r in (data_res or res)) if d]
         last_src = "file added"
@@ -132,36 +150,37 @@ for p in recs:
     temporal = p["time_coverage"]
     email = p["email"]
     fd_vals = Counter(r["col_desc"] for r in data_res)
-    dict_doc = any(DICT_NAME.search(r["name"] or "") for r in res if r["doc"])
+    dict_doc = any(r["dictionary"] or (r["doc"] and DICT_NAME.search(r["name"] or "")) for r in res)
     fields_rec = p["columns"] or {}
     labelled_cols = any((c.get("label") or c.get("notes")) for c in fields_rec.get("fields") or [])
-    if fd_vals.get("relidi.descha.foudoc") or dict_doc:
+    if fd_vals.get("Separate document") or dict_doc:
         field_desc = "Separate document"
-    elif fd_vals.get("relidi.descha.foumet") or labelled_cols:
+    elif fd_vals.get("In the description") or labelled_cols:
         field_desc = "In the description"
-    elif fd_vals.get("relidi.descha.absent"):
+    elif fd_vals.get("Missing"):
         field_desc = "Missing"
     else:
         field_desc = "Not stated"
+    # a field the portal doesn't have gets half points (rounded up), not zero
     s_doc = (7 if len(desc) >= 400 else 4 if len(desc) >= 150 else 1 if desc else 0)
     s_doc += 8 if field_desc in ("Separate document", "In the description") else 0
-    s_doc += 5 if len(method) >= 40 else 0
-    s_doc += 3 if temporal else 0
+    s_doc += 3 if p["methodology"] is None else 5 if len(method) >= 40 else 0
+    s_doc += 2 if temporal is None else 3 if temporal else 0
     s_doc += 2 if email else 0
 
     # portal conformity checks on data files
     check_summary = []
     yes = no = 0
     for label in CHECK_LABELS:
-        vals = [r["checks"].get(label, "").lower() for r in data_res]
-        y, n = sum(v in YES for v in vals), sum(v in NO for v in vals)
+        vals = [r["checks"].get(label) for r in data_res]
+        y, n = vals.count("yes"), vals.count("no")
         yes += y
         no += n
         if y or n:
             check_summary.append([label, y, n])
     s_conf = round(15 * yes / (yes + no)) if (yes + no) else 8
 
-    commercial, s_lic = licence_info(p["licence_id"])
+    commercial, s_lic = licence_info(p["licence_id"], p["licence_title"])
     score = s_fresh + s_fmt + s_api + s_doc + s_conf + s_lic
     grade = "A" if score >= 85 else "B" if score >= 70 else "C" if score >= 55 else "D"
 
@@ -178,6 +197,8 @@ for p in recs:
         flags.append("Archive: kept for history, not updated")
     elif status == "unknown":
         flags.append("No file dates, so freshness can't be checked")
+    if p["frequency"] == "notStated":
+        flags.append("No update frequency promised")
     if not data_res:
         flags.append("No data files (documents or links only)")
     elif s_fmt == 0:
@@ -186,7 +207,9 @@ for p in recs:
         flags.append("Publisher says column descriptions are missing")
     elif field_desc == "Not stated":
         flags.append("No column descriptions found")
-    if not commercial:
+    if s_lic == 0:
+        flags.append(f"No open licence ({p['licence_title']})")
+    elif not commercial:
         flags.append(f"Non-commercial licence ({p['licence_title']})")
     elif s_lic < 10:
         flags.append(f"No-derivatives licence ({p['licence_title']})")
@@ -245,6 +268,9 @@ for p in recs:
         "v": p["views"], "vr": p["views_recent"], "nf": len(res), "nd": len(data_res),
         "fl": flags, "files": files, "cols": cols, "lang": p["language"],
     })
+
+if UNKNOWN_LICENCES:
+    raise SystemExit(f"Unlisted licences, add them to LICENCES: {sorted(UNKNOWN_LICENCES)}")
 
 os.makedirs(out_dir, exist_ok=True)
 summary = {
